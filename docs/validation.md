@@ -40,7 +40,7 @@ The browser suite uses Chromium with synthetic HTTP fixtures; the live test uses
 
 ## Remaining release checks
 
-Docker CLI access is denied by the local daemon, and noninteractive sudo is unavailable. The image build and container config/smoke/populated-replica-restore checks have not run. CI includes these release gates. The native populated-backup test does not establish Litestream/R2 recovery.
+Docker CLI access is denied by the local daemon, and noninteractive sudo is unavailable. These checks subsequently passed in [release CI](https://github.com/pocketcontext/notifycontext/actions/runs/36387200250): image build, container config/smoke and populated Litestream/MinIO replica restore. A production R2 recovery drill still requires the dedicated deployment credentials.
 
 No real Google OAuth client or production hostname has been configured. Live Google browser sign-in, real operating-system popup delivery, actual recipient device compatibility, HTTPS/proxy behavior, dedicated R2 access/replication and deployment remain unverified. Desktop alerts require an open authenticated browser client; there is no background Web Push.
 
