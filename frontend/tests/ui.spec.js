@@ -3,7 +3,8 @@ const user='user00000000001',sender='user00000000002';
 const jwt=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:user,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
 const now=new Date().toISOString();
 const initial={id:'note00000000001',sender,subject:'Supplier renewal ready',body_markdown:'## Review requested\n\nPlease review the [handoff](https://example.com).\n\n| Item | Status |\n| --- | --- |\n| Quote | Ready |\n\n```js\nconst approved = false;\n```\n\n<img src=x onerror="window.attacked=true">\n\n[bad](javascript:window.attacked=true)',kind:'review_requested',ack_required:true,due_at:'',withdrawn_at:'',withdrawal_reason:'',revision:1,created:now};
-async function setup(page, {count=1,permission='default'}={}) {
+async function setup(page, {count=1,permission='default',holdRead=false}={}) {
+  let releaseRead;const readGate=new Promise(resolve=>{releaseRead=resolve;});
   const writes=[],notices=[];let preference=null;let notes=Array.from({length:count},(_,i)=>({...initial,id:'note'+String(i+1).padStart(11,'0'),subject:i?'Notification '+(i+1):initial.subject}));
   let recipients=notes.map((n,i)=>({id:'recp'+String(i+1).padStart(11,'0'),notification:n.id,recipient:user,read_at:'',acknowledged_at:'',archived_at:'',acknowledgement_markdown:'',revision:1,created:now}));
   const result=records=>({columns:Object.keys(records[0]||{}),rows:records.map(Object.values),truncated:false});
@@ -34,18 +35,26 @@ async function setup(page, {count=1,permission='default'}={}) {
       if(recipient){if(body.action==='read')recipient.read_at=now;if(body.action==='acknowledge'){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}data=recipient;}
       else if(url.pathname.includes('notification_preferences')){preference={id:'prefs0000000001',revision:1,...body};data=preference;}else data={...initial,id:'created00000001',...body};
     }
+    if(holdRead && body?.action==='read')await readGate;
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
   await page.goto('/');await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();await expect(page.getByRole('heading',{name:'Inbox',exact:true})).toBeVisible();await expect(page.locator('#connection')).toContainText('Connected');
-  return {writes,addNotification(){notes.unshift({...initial,id:'new000000000001',created:new Date().toISOString(),subject:'New update'});recipients.unshift({id:'newrec000000001',notification:'new000000000001',recipient:user,revision:1,read_at:'',acknowledged_at:'',archived_at:''});}};
+  return {writes,releaseRead,addNotification(){notes.unshift({...initial,id:'new000000000001',created:new Date().toISOString(),subject:'New update'});recipients.unshift({id:'newrec000000001',notification:'new000000000001',recipient:user,revision:1,read_at:'',acknowledged_at:'',archived_at:''});}};
 }
 test('safe Markdown detail and explicit recipient actions',async({page})=>{
-  const {writes}=await setup(page);
+  const {writes,releaseRead}=await setup(page,{holdRead:true});
   await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
   await expect(page.locator('article table')).toBeVisible();await expect(page.locator('article pre')).toHaveText('const approved = false;\n');
   expect(await page.evaluate(()=>window.attacked)).toBeUndefined();await expect(page.locator('article img')).toHaveCount(0);await expect(page.locator('article a[href^="javascript:"]')).toHaveCount(0);
   expect(writes).toHaveLength(0);
+  await page.getByLabel('Optional acknowledgement note').fill('Draft survives marking read.');
   await page.getByRole('button',{name:'Mark read',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);expect(writes[0].body.action).toBe('read');
+  await expect(page.getByLabel('Optional acknowledgement note')).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Acknowledge',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Archive',exact:true})).toBeDisabled();
+  releaseRead();
+  await expect(page.getByRole('button',{name:'Mark read',exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Optional acknowledgement note')).toHaveValue('Draft survives marking read.');
   await page.getByLabel('Optional acknowledgement note').fill('Received, reviewing tomorrow.');await page.getByRole('button',{name:'Acknowledge',exact:true}).click();await expect(page.locator('.acknowledgement')).toContainText('Received, reviewing tomorrow.');expect(writes[1].body.action).toBe('acknowledge');
 });
 test('complete backlog pagination and search',async({page})=>{

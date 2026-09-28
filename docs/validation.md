@@ -1,6 +1,6 @@
 # Local validation — 28 September 2026
 
-Implemented locally; no production service, cloud resource, remote application repository or image has been published.
+This records initial local implementation validation. Later public release/deployment status is recorded in [DEPLOYMENT.md](../DEPLOYMENT.md).
 
 ## Pinned server
 
@@ -44,4 +44,4 @@ Docker CLI access is denied by the local daemon, and noninteractive sudo is unav
 
 No real Google OAuth client or production hostname has been configured. Live Google browser sign-in, real operating-system popup delivery, actual recipient device compatibility, HTTPS/proxy behavior, dedicated R2 access/replication and deployment remain unverified. Desktop alerts require an open authenticated browser client; there is no background Web Push.
 
-Application image publication is disabled until `NOTIFYCONTEXT_PUBLISH_ENABLED` is explicitly enabled after release setup and authorization. Deployment preparation is in `docs/deployment.md`; no production deployment workflow is active.
+Application image publication is gated by `NOTIFYCONTEXT_PUBLISH_ENABLED` and passing release checks. Public publication was subsequently authorized and enabled; see the release status above. Deployment preparation is in `docs/deployment.md`; no automatic production deployment workflow is active.

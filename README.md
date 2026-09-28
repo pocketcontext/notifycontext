@@ -80,4 +80,4 @@ Frontend browser commands and actual results are recorded in [validation evidenc
 
 The application domain model is independent. Authentication, Google login, account lifecycle, container replication and locked deployment patterns were adapted from RaiseContext `d9e337a05fddfdc26e082f8e1a1e3b0efb0c0e52`; filtered-snapshot patterns were inspected in ChatContext `7fac3712007b8d123620f46eb93888bf8e51118b`. The server pin is `a92b0de5e1b66b6d3b6135b90092d2d6da5f7cc8`.
 
-No production service or external resources have been provisioned. Publication and deployment need their own configured targets and authorization.
+Source is public at https://github.com/pocketcontext/notifycontext. Public container publication and ONCE deployment are authorized and in preparation; see [deployment status](DEPLOYMENT.md) for verified release evidence and remaining setup.
