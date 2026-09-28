@@ -413,12 +413,18 @@ def backlog(cfg, args):
         raise Fail(2, '--since must be earlier than --before')
     if not 1 <= args.page_size <= 100:
         raise Fail(2, 'page size must be 1–100')
+    if (args.awaiting_signup or args.expired_signup) and not args.sent:
+        raise Fail(2, '--awaiting-signup and --expired-signup require --sent')
     uid = identity(cfg)['id']
     predicates = [('n.sender' if args.sent else 'r.recipient') + ' = ' + literal(uid)]
     if not args.include_archived and not args.sent:
         predicates.append("r.archived_at = ''")
     if not args.include_withdrawn:
         predicates.append("n.withdrawn_at = ''")
+    if args.awaiting_signup:
+        predicates.extend(["n.withdrawn_at = ''", "r.recipient = ''", "r.claim_expires_at != ''", "julianday(r.claim_expires_at) > julianday('now')"])
+    if args.expired_signup:
+        predicates.extend(["n.withdrawn_at = ''", "r.recipient = ''", "r.claim_expires_at != ''", "julianday(r.claim_expires_at) <= julianday('now')"])
     if args.unread:
         predicates.append("r.read_at = ''")
     if args.awaiting_ack:
@@ -440,10 +446,15 @@ def backlog(cfg, args):
         raise Fail(2, 'page size must be 1–100')
     while True:
         sql = '''SELECT r.id AS recipient_record_id,r.recipient,r.revision AS recipient_revision,
+          d.name AS recipient_name,r.addressed_email,r.claimed_at,r.claim_expires_at,
+          CASE WHEN n.withdrawn_at != '' THEN 'withdrawn'
+               WHEN r.recipient != '' THEN CASE WHEN r.claimed_at != '' THEN 'claimed' ELSE 'registered' END
+               WHEN julianday(r.claim_expires_at) <= julianday('now') THEN 'expired' ELSE 'awaiting_signup' END AS signup_status,
           r.read_at,r.acknowledged_at,r.acknowledgement_markdown,r.archived_at,
           n.id AS notification_id,n.sender,n.subject,n.body_markdown,n.kind,n.ack_required,
           n.due_at,n.created,n.withdrawn_at,n.withdrawal_reason
-          FROM notification_recipients r JOIN notifications n ON n.id=r.notification WHERE '''
+          FROM notification_recipients r JOIN notifications n ON n.id=r.notification
+          LEFT JOIN user_directory d ON d.id=r.recipient WHERE '''
         sql += ' AND '.join(predicates + ['r.id > ' + literal(cursor)]) + f' ORDER BY r.id LIMIT {size}'
         rows, truncated = query_rows(cfg, sql)
         if truncated:
@@ -528,8 +539,11 @@ def run(args):
         body = read_json(args.json, dict, 'notification')
         if not isinstance(body.get('submission_key'), str) or not body['submission_key'].strip():
             raise Fail(2, 'publish requires a stable submission_key; generate once with newkey and retain the payload for retries')
-        if not isinstance(body.get('recipients'), list) or not body['recipients']:
-            raise Fail(2, 'publish requires explicit recipient user IDs')
+        recipients, emails = body.get('recipients', []), body.get('recipient_emails', [])
+        if (not isinstance(recipients, list) or not isinstance(emails, list)
+                or not 1 <= len(recipients) + len(emails) <= 100
+                or any(not isinstance(value, str) or not value.strip() for value in recipients + emails)):
+            raise Fail(2, 'publish requires 1–100 explicit recipients and/or recipient_emails as arrays of nonempty strings')
         data = must(cfg, 'POST', records('notifications'), body)
     elif args.command in ('create', 'update'):
         body = read_json(args.json, dict, 'record')
@@ -570,6 +584,9 @@ def parse(argv):
     p = commands.add_parser('backlog', help='Retrieve every matching recipient row with keyset pagination')
     for flag in ('sent', 'include-archived', 'include-withdrawn', 'unread', 'awaiting-ack', 'overdue'):
         p.add_argument('--' + flag, action='store_true')
+    signup = p.add_mutually_exclusive_group()
+    signup.add_argument('--awaiting-signup', action='store_true', help='With --sent: unclaimed email recipients before their 30-day expiry')
+    signup.add_argument('--expired-signup', action='store_true', help='With --sent: unclaimed email recipients whose claim deadline passed')
     for flag in ('sender', 'search', 'since', 'before'):
         p.add_argument('--' + flag)
     p.add_argument('--kind', choices=('fyi', 'review_requested', 'action_required'))

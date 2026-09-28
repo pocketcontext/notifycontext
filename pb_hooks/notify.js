@@ -3,7 +3,7 @@ function denied(){throw new ForbiddenError('This operation is not permitted');}
 function conflict(){throw new ApiError(409,'Revision or submission conflict',{});}
 function rows(app,table,filter,params){return app.findRecordsByFilter(table,filter,'',0,0,params||{});}
 function get(app,table,id){try{return app.findRecordById(table,id);}catch(_){throw new NotFoundError('Record not accessible');}}
-function active(app,id){const u=get(app,'users',id);if(u.getBool('disabled')||!u.getBool('verified'))denied();}
+function active(app,id){const u=get(app,'users',id);if(u.getBool('disabled')||!u.getBool('verified'))denied();return u;}
 function only(body,fields){for(const k of Object.keys(body))if(!fields.includes(k))invalid(k+' is not accepted');}
 function str(value,name,max,required){if(value===undefined&&!required)return '';if(typeof value!=='string'||value.length>max||(required&&!value.trim()))invalid('Invalid '+name);return value;}
 function date(value,name){
@@ -20,10 +20,36 @@ function record(app,table,values){const r=new Record(app.findCollectionByNameOrI
 function event(app,n,actor,type,recipient){record(app,'notification_events',{notification:n,notification_recipient:recipient||'',actor,event_type:type});}
 function revision(body,r){if(!Number.isSafeInteger(body.expected_revision)||body.expected_revision<1)invalid('expected_revision must be a positive integer');if(body.expected_revision!==r.getInt('revision'))conflict();}
 function bump(app,r){const n=r.getInt('revision')+1;if(!Number.isSafeInteger(n))invalid('Revision exhausted');r.set('revision',n);app.save(r);return r;}
+function normalizeEmail(value){
+  if(typeof value!=='string')invalid('Invalid recipient email');
+  const email=value.trim().toLowerCase(),parts=email.split('@');
+  if(email.length>254||parts.length!==2||parts[0].length>64||!parts[0]||parts[0].startsWith('.')||parts[0].endsWith('.')||parts[0].includes('..')||!/^[a-z0-9.!#$%&'*+\/=?^_`{|}~-]+$/.test(parts[0]))invalid('Invalid recipient email');
+  const domain=require(`${__hooks}/google_auth.js`).domain();
+  if(!domain||parts[1]!==domain)invalid('Recipient email must belong to the configured Workspace domain');
+  return email;
+}
+function claimAuth(e){
+  const email=e.get('notifycontextTrustedGoogleEmail');
+  if(e.authMethod==='oauth2'&&email){
+    const user=active(e.app,e.record.id);
+    if(user.getString('email').trim().toLowerCase()!==email)denied();
+    const now=new Date().toISOString();
+    for(const r of rows(e.app,'notification_recipients',"recipient = '' && addressed_email = {:email} && claim_expires_at > {:now}",{email,now:now.replace('T',' ')})){
+      const n=get(e.app,'notifications',r.getString('notification'));
+      if(n.getString('withdrawn_at'))continue;
+      // A previously linked row must never be replaced or merged with another identity.
+      if(rows(e.app,'notification_recipients','notification = {:n} && recipient = {:u}',{n:n.id,u:user.id}).length)continue;
+      r.set('recipient',user.id);r.set('claimed_at',now);r.set('claim_expires_at','');bump(e.app,r);
+      event(e.app,n.id,user.id,'claimed',r.id);
+    }
+  }
+  return e.next();
+}
 function publish(app,id,b){
-  only(b,['subject','body_markdown','kind','ack_required','due_at','submission_key','recipients','references']);
-  const recipients=b.recipients;
-  if(!Array.isArray(recipients)||!recipients.length||recipients.length>100||recipients.some(x=>typeof x!=='string'||!x))invalid('recipients must contain 1–100 user IDs');
+  only(b,['subject','body_markdown','kind','ack_required','due_at','submission_key','recipients','recipient_emails','references']);
+  const recipients=b.recipients===undefined?[]:b.recipients,emailInputs=b.recipient_emails===undefined?[]:b.recipient_emails;
+  if(!Array.isArray(recipients)||!Array.isArray(emailInputs)||recipients.length+emailInputs.length<1||recipients.length+emailInputs.length>100||recipients.some(x=>typeof x!=='string'||!x))invalid('Provide 1–100 combined user IDs and recipient emails');
+  const emails=Array.from(new Set(emailInputs.map(normalizeEmail))).sort();
   if(b.ack_required!==undefined&&typeof b.ack_required!=='boolean')invalid('ack_required must be boolean');
   if(!['fyi','review_requested','action_required'].includes(b.kind))invalid('Invalid kind');
   const refs=b.references===undefined?[]:b.references;
@@ -34,12 +60,21 @@ function publish(app,id,b){
     const url=str(ref.url,'url',2000,true);if(!/^https?:\/\/[^\s/?#]+(?:[/?#][^\s]*)?$/i.test(url)||/[\u0000-\u0020\u007f]/.test(url))invalid('Reference URL must be HTTP(S)');
     return {kind:ref.kind,label:str(ref.label,'label',200,true),url,source_system:str(ref.source_system,'source_system',100),external_id:str(ref.external_id,'external_id',200)};
   })};
+  // Omit empty email inputs to retain byte-for-byte compatibility with old ID-only keys.
+  if(emails.length)payload.recipient_emails=emails;
   const canonical=JSON.stringify(payload),existing=rows(app,'notifications','sender = {:id} && submission_key = {:key}',{id,key:payload.submission_key})[0];
   if(existing){if(existing.getString('submission_payload')!==canonical)conflict();return existing;}
-  for(const target of payload.recipients)active(app,target);
+  const targets={},now=new Date().toISOString(),expires=new Date(Date.now()+30*86400000).toISOString();
+  for(const target of payload.recipients){active(app,target);targets[target]={recipient:target,addressed_email:'',claimed_at:'',claim_expires_at:''};}
+  for(const email of emails){
+    const matches=rows(app,'users','email:lower = {:email}',{email});
+    if(matches.length>1)denied();
+    if(matches.length){const u=active(app,matches[0].id);targets[u.id]={recipient:u.id,addressed_email:email,claimed_at:now,claim_expires_at:''};}
+    else targets['email:'+email]={recipient:'',addressed_email:email,claimed_at:'',claim_expires_at:expires};
+  }
   const values={sender:id,revision:1,submission_payload:canonical};for(const k of ['subject','body_markdown','kind','ack_required','due_at','submission_key'])values[k]=payload[k];
   const n=record(app,'notifications',values);
-  for(const target of payload.recipients)record(app,'notification_recipients',{notification:n.id,recipient:target,revision:1});
+  for(const key of Object.keys(targets))record(app,'notification_recipients',Object.assign({notification:n.id,revision:1},targets[key]));
   for(const ref of payload.references)record(app,'notification_references',Object.assign({notification:n.id},ref));
   event(app,n.id,id,'published');return n;
 }
@@ -74,7 +109,7 @@ function personal(app,id,table,r,b){
 // Rebind original JSON: PocketBase's loaded requestInfo body has already coerced
 // record fields (including malformed dates/booleans), which cannot validate intent.
 function rawBody(e){
-  const shape={};for(const key of Object.keys(e.requestInfo().body))shape[key]=key==='ack_required'?false:key==='expected_revision'?-0:['recipients','references'].includes(key)?[]:'';
+  const shape={};for(const key of Object.keys(e.requestInfo().body))shape[key]=key==='ack_required'?false:key==='expected_revision'?-0:['recipients','recipient_emails','references'].includes(key)?[]:'';
   const model=new DynamicModel(shape);try{e.bindBody(model);}catch(_){invalid('Invalid JSON field types');}
   return JSON.parse(JSON.stringify(model));
 }
@@ -90,4 +125,4 @@ function write(e){
   });
   return e.json(200,result);
 }
-module.exports={write};
+module.exports={write,claimAuth};

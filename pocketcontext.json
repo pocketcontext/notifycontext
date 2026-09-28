@@ -30,7 +30,10 @@
       "acknowledgement_markdown",
       "revision",
       "created",
-      "updated"
+      "updated",
+      "addressed_email",
+      "claimed_at",
+      "claim_expires_at"
     ],
     "notification_references": [
       "id",

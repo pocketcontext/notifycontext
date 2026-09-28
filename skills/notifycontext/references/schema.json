@@ -104,6 +104,18 @@
         {
           "name": "updated",
           "type": "TEXT"
+        },
+        {
+          "name": "addressed_email",
+          "type": "TEXT"
+        },
+        {
+          "name": "claimed_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "claim_expires_at",
+          "type": "TEXT"
         }
       ]
     },
@@ -263,9 +275,9 @@
     "maxBytes": 1048576
   },
   "snapshotLimits": {
-    "maxBytes": 33554432,
-    "maxConcurrent": 4,
     "timeoutMs": 5000,
-    "maxRows": 100000
+    "maxRows": 100000,
+    "maxBytes": 33554432,
+    "maxConcurrent": 4
   }
 }

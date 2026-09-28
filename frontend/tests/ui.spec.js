@@ -3,10 +3,16 @@ const user='user00000000001',sender='user00000000002';
 const jwt=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:user,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
 const now=new Date().toISOString();
 const initial={id:'note00000000001',sender,subject:'Supplier renewal ready',body_markdown:'## Review requested\n\nPlease review the [handoff](https://example.com).\n\n| Item | Status |\n| --- | --- |\n| Quote | Ready |\n\n```js\nconst approved = false;\n```\n\n<img src=x onerror="window.attacked=true">\n\n[bad](javascript:window.attacked=true)',kind:'review_requested',ack_required:true,due_at:'',withdrawn_at:'',withdrawal_reason:'',revision:1,created:now};
-async function setup(page, {count=1,permission='default',holdRead=false}={}) {
+async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false}={}) {
   let releaseRead;const readGate=new Promise(resolve=>{releaseRead=resolve;});
   const writes=[],notices=[];let preference=null;let notes=Array.from({length:count},(_,i)=>({...initial,id:'note'+String(i+1).padStart(11,'0'),subject:i?'Notification '+(i+1):initial.subject}));
   let recipients=notes.map((n,i)=>({id:'recp'+String(i+1).padStart(11,'0'),notification:n.id,recipient:user,read_at:'',acknowledged_at:'',archived_at:'',acknowledgement_markdown:'',revision:1,created:now}));
+  if(pending){
+    notes[0].sender=user;if(withdrawn){notes[0].withdrawn_at=now;notes[0].withdrawal_reason='Superseded';}
+    recipients=[{...recipients[0],recipient:sender,recipient_name:'Jack',addressed_email:'jack@example.test',claimed_at:now,claim_expires_at:''},
+      {...recipients[0],id:'pending00000001',recipient:'',recipient_name:null,addressed_email:'new.colleague@example.test',claimed_at:'',claim_expires_at:new Date(Date.now()+30*86400000).toISOString()},
+      {...recipients[0],id:'expired00000001',recipient:'',recipient_name:null,addressed_email:'expired.colleague@example.test',claimed_at:'',claim_expires_at:'2020-01-01 00:00:00.000Z'}];
+  }
   const result=records=>({columns:Object.keys(records[0]||{}),rows:records.map(Object.values),truncated:false});
   await page.addInitScript(({permission})=>{window.notificationCalls=[];window.Notification=class {static permission=permission;static async requestPermission(){this.permission='granted';return 'granted';}constructor(title,options){window.notificationCalls.push({title,...options});}close(){}};},{permission});
   await page.route('**/api/**',async route=>{
@@ -89,4 +95,20 @@ test('revoked session returns to login and clears private content',async({page})
 test('revoked session during detail loading cannot render stale content',async({page})=>{
  const errors=[];page.on('pageerror',error=>errors.push(error.message));await setup(page);await page.route('**/api/context/query',async route=>{if(route.request().postDataJSON().sql.startsWith('SELECT * FROM notifications'))await route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({message:'Authentication required'})});else await route.fallback();});
  await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();expect(errors).toEqual([]);await expect(page.locator('article')).toHaveCount(0);
+});
+
+test('email-only and mixed addressing preserve explicit recipients and explain no invitation',async({page})=>{
+ const {writes}=await setup(page);await page.getByRole('button',{name:'New notification'}).click();await expect(page.getByText('No invitation email is sent.',{exact:true})).toBeVisible();
+ await page.getByLabel('Subject',{exact:true}).fill('Welcome handoff');await page.locator('#body').fill('Please review this when you sign in.');
+ await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.locator('#form-error')).toContainText('Choose a colleague');expect(writes).toHaveLength(0);
+ await page.getByLabel('Recipient emails',{exact:true}).fill('NEW.Colleague@example.test, second@example.test');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();
+ expect(writes[0].body.recipients).toEqual([]);expect(writes[0].body.recipient_emails).toEqual(['new.colleague@example.test','second@example.test']);
+ await page.getByRole('button',{name:'New notification'}).click();await page.getByLabel('To',{exact:true}).selectOption(sender);await page.getByLabel('Recipient emails',{exact:true}).fill('another@example.test');await page.getByLabel('Subject',{exact:true}).fill('Mixed recipients');await page.locator('#body').fill('Shared update');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();expect(writes[1].body.recipients).toEqual([sender]);expect(writes[1].body.recipient_emails).toEqual(['another@example.test']);
+});
+test('Sent keeps pending recipients without directory accounts and distinguishes expiry',async({page})=>{
+ await setup(page,{pending:true});await page.getByRole('button',{name:'Sent',exact:false}).click();await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
+ const statuses=page.locator('.recipient-status');await expect(statuses.getByText('new.colleague@example.test',{exact:true})).toBeVisible();await expect(statuses.getByText('Awaiting first sign-in',{exact:true})).toBeVisible();await expect(statuses.getByText('expired.colleague@example.test',{exact:true})).toBeVisible();await expect(statuses.getByText('Expired',{exact:true})).toBeVisible();await expect(statuses.getByText('Unread',{exact:true})).toBeVisible();await expect(statuses.getByText('jack@example.test',{exact:true})).toBeVisible();
+});
+test('withdrawal takes precedence over pending and expired recipient statuses',async({page})=>{
+ await setup(page,{pending:true,withdrawn:true});await page.getByRole('button',{name:'Sent',exact:false}).click();await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page.locator('.recipient-status').getByText('Withdrawn',{exact:true})).toHaveCount(3);await expect(page.getByText('Awaiting first sign-in',{exact:true})).toHaveCount(0);await expect(page.getByText('Expired',{exact:true})).toHaveCount(0);
 });

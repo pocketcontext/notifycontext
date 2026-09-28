@@ -6,6 +6,8 @@ General-purpose colleague notifications with Markdown, explicit acknowledgements
 
 Send FYIs, review requests or action requests to one or more colleagues. Subjects, Markdown bodies and optional document/task/record/URL references are immutable after publication. Senders can withdraw with a reason; corrections are new notifications. A sender-scoped submission key makes identical publication retries return the existing notification, while changed payloads conflict.
 
+Send to existing directory users or exact email addresses in the configured Workspace domain. Email destinations without an eligible account wait for the matching verified Google sign-in, for up to 30 days. They appear in the sender's backlog as awaiting first sign-in or expired. No email invitation is sent and no placeholder authentication account is created. Pending deliveries are not claimed after withdrawal or expiry; a sender must publish a new notification to reissue one. Existing claimed history is never reassigned after an email change. Email aliases are not automatically merged.
+
 Recipients explicitly mark read, acknowledge (with an optional Markdown note), archive or unarchive. Acknowledgement is receipt and understanding, not task completion. SQL reads, summaries and background fetching never mutate read state. Senders see recipient states; recipients see only their own recipient state. Administrators have no ordinary-user privacy bypass. Operator database access remains a trusted maintenance capability.
 
 Manual availability is available, busy, in a meeting, away or not set, with an optional message and expiry. Expired statuses display as not set. Availability is visible to colleagues; alert-pause preferences are private. Neither status nor pausing alerts prevents inbox delivery. Deadlines do not schedule reminders.
@@ -66,6 +68,7 @@ python3 tests/integration.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/security.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/auth.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/oauth_integration.py --binary /absolute/path/to/pinned/pocketcontext
+python3 tests/pending_recipients.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/skill.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/deploy.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/backup.py --binary /absolute/path/to/pinned/pocketcontext
@@ -80,4 +83,4 @@ Frontend browser commands and actual results are recorded in [validation evidenc
 
 The application domain model is independent. Authentication, Google login, account lifecycle, container replication and locked deployment patterns were adapted from RaiseContext `d9e337a05fddfdc26e082f8e1a1e3b0efb0c0e52`; filtered-snapshot patterns were inspected in ChatContext `7fac3712007b8d123620f46eb93888bf8e51118b`. The server pin is `a92b0de5e1b66b6d3b6135b90092d2d6da5f7cc8`.
 
-Source is public at https://github.com/pocketcontext/notifycontext. Public container publication and ONCE deployment are authorized and in preparation; see [deployment status](DEPLOYMENT.md) for verified release evidence and remaining setup.
+Source is public at https://github.com/pocketcontext/notifycontext. The public application is deployed at https://notify.pocketcontext.com; see [deployment status](DEPLOYMENT.md) for verified release evidence and remaining setup.

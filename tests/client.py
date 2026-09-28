@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Behavioral tests: complete backlog, safe writes, partial results and SQL quoting."""
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -106,6 +107,44 @@ class ClientTest(unittest.TestCase):
         self.assertIn("julianday(n.due_at) < julianday('now')", sql)
         self.assertIn("r.acknowledged_at = ''", sql)
         self.assertIn("n.withdrawn_at = ''", sql)
+
+    def test_signup_filters_require_sent_before_network(self):
+        for flag in ('--awaiting-signup', '--expired-signup'):
+            with patch.object(nc, 'identity') as identity:
+                with self.assertRaises(nc.Fail) as error:
+                    nc.backlog({}, nc.parse(['backlog', flag]))
+                self.assertEqual(error.exception.code, 2)
+                identity.assert_not_called()
+
+    def test_signup_filters_keep_pending_rows_without_directory_matches(self):
+        for flag, comparison in [('--awaiting-signup', '>'), ('--expired-signup', '<=')]:
+            with self.subTest(flag=flag), patch.object(nc, 'identity', return_value={'id': 'self'}), patch.object(nc, 'query_rows', return_value=([], False)) as query:
+                nc.backlog({}, nc.parse(['backlog', '--sent', flag, '--include-withdrawn']))
+                sql = query.call_args.args[1]
+                self.assertIn('LEFT JOIN user_directory d ON d.id=r.recipient', sql)
+                self.assertIn("r.recipient = ''", sql)
+                self.assertIn("n.withdrawn_at = ''", sql)
+                self.assertIn("julianday(r.claim_expires_at) " + comparison + " julianday('now')", sql)
+                self.assertIn('r.addressed_email', sql)
+                self.assertIn('AS signup_status', sql)
+
+    def test_email_only_publication_and_unchanged_retry_payload(self):
+        payload = {'submission_key': 'stable-key', 'recipient_emails': ['colleague@example.com'],
+                   'subject': 'Supplier review', 'body_markdown': 'Please review', 'kind': 'fyi'}
+        with patch.object(nc, 'config', return_value={}), patch.object(nc, 'must', return_value={'id': 'notification001'}) as must, patch.object(nc, 'say'):
+            for _ in range(2): nc.run(nc.parse(['publish', json.dumps(payload)]))
+        self.assertEqual(must.call_count, 2)
+        for call in must.call_args_list:
+            self.assertEqual(call.args[3], payload)
+
+    def test_invalid_mixed_recipient_lists_fail_without_network(self):
+        for extra in [{'recipient_emails': 'a@example.com'}, {'recipient_emails': ['']},
+                      {'recipients': [], 'recipient_emails': []}, {'recipient_emails': ['a@example.com'] * 101},
+                      {'recipients': ['recipient000001'], 'recipient_emails': [None]}]:
+            with self.subTest(extra=extra), patch.object(nc, 'config', return_value={}), patch.object(nc, 'must') as must:
+                with self.assertRaises(nc.Fail):
+                    nc.run(nc.parse(['publish', json.dumps({'submission_key': 'key', **extra})]))
+                must.assert_not_called()
 
     def test_publication_requires_recoverable_key_before_network(self):
         with patch.object(nc, 'config', return_value={}), patch.object(nc, 'must') as must:

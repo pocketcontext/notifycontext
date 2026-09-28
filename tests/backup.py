@@ -17,14 +17,16 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument('--binary',required=True);args=ap.parse_args()
     with tempfile.TemporaryDirectory(prefix='notifycontext-restore-') as tmp:
         restored=Path(tmp)/'restored';restored.mkdir()
-        with server(args.binary) as r:
+        with server(args.binary, {'NOTIFYCONTEXT_GOOGLE_WORKSPACE_DOMAIN':'example.test'}) as r:
             op=operator(r);sender,st=account(r,op,'sender@example.test');recipient,rt=account(r,op,'recipient@example.test');outsider,ot=account(r,op,'outsider@example.test')
-            n=r('POST',path('notifications'),{'subject':'Synthetic renewal','body_markdown':'## Please review\n**Supplier renewal**','kind':'review_requested','ack_required':True,'submission_key':'restore-fixture','recipients':[recipient['id']],'references':[{'kind':'document','label':'Terms','url':'https://example.test/terms','external_id':'revision-1'}]},st)
+            n=r('POST',path('notifications'),{'subject':'Synthetic renewal','body_markdown':'## Please review\n**Supplier renewal**','kind':'review_requested','ack_required':True,'submission_key':'restore-fixture','recipients':[recipient['id']],'recipient_emails':['future@example.test'],'references':[{'kind':'document','label':'Terms','url':'https://example.test/terms','external_id':'revision-1'}]},st)
             rec=query(r,'SELECT * FROM notification_recipients',rt)[0]
             r('PATCH',path('notification_recipients')+'/'+rec['id'],{'action':'acknowledge','acknowledgement_markdown':'Received, review tomorrow.','expected_revision':1},rt)
             r('POST',path('user_status'),{'availability':'busy','message':'Reviewing'},rt)
             r('POST',path('notification_preferences'),{'alerts_paused_until':'2030-01-01T00:00:00Z'},rt)
             expected={t:query(r,'SELECT * FROM '+t+' ORDER BY id',rt) for t in ['notifications','notification_recipients','notification_references','notification_events','user_status','notification_preferences']}
+            pending_expected=query(r,"SELECT * FROM notification_recipients WHERE recipient = '' ORDER BY id",st)
+            assert len(pending_expected)==1 and pending_expected[0]['addressed_email']=='future@example.test' and pending_expected[0]['claim_expires_at']
             r('POST','/api/backups',{'name':'synthetic-recovery.zip'},op,expected=204)
             with zipfile.ZipFile(r.data_dir/'backups'/'synthetic-recovery.zip') as archive:
                 for entry in archive.infolist():
@@ -51,6 +53,9 @@ def main():
                 auth=request('POST','/api/collections/users/auth-with-password',{'identity':'recipient@example.test','password':PASSWORD})
                 assert auth['record']['id']==recipient['id']
                 for table,rows in expected.items():assert query(request,'SELECT * FROM '+table+' ORDER BY id',auth['token'])==rows,table
+                sender_auth=request('POST','/api/collections/users/auth-with-password',{'identity':'sender@example.test','password':PASSWORD})
+                assert query(request,"SELECT * FROM notification_recipients WHERE recipient = '' ORDER BY id",sender_auth['token'])==pending_expected
+                assert not query(request,"SELECT * FROM notification_recipients WHERE recipient = ''",auth['token'])
                 other=request('POST','/api/collections/users/auth-with-password',{'identity':'outsider@example.test','password':PASSWORD})
                 assert query(request,'SELECT * FROM notifications',other['token'])==[]
                 assert query(request,'SELECT * FROM notification_preferences',other['token'])==[]

@@ -19,15 +19,21 @@ ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = 'SyntheticUserPassword123!'
 
 @contextlib.contextmanager
-def server(binary, env=None):
+def server(binary, env=None, fixture_migrations=None):
     with tempfile.TemporaryDirectory(prefix='notifycontext-test-') as tmp:
         hooks=Path(tmp)/'pb_hooks'
         shutil.copytree(ROOT/'pb_hooks',hooks)
         (hooks/'zz_failure_fixture.pb.js').write_text('''
 onRecordCreateExecute(e=>{if(e.record.getString('event_type')==='published' && e.app.findRecordById('notifications',e.record.getString('notification')).getString('subject')==='Synthetic audit failure')throw new Error('Synthetic audit failure');e.next();},'notification_events');
+onRecordCreateExecute(e=>{if(e.record.getString('event_type')==='published' && e.app.findRecordById('notifications',e.record.getString('notification')).getString('subject')==='Synthetic expired recipient'){for(const r of e.app.findRecordsByFilter('notification_recipients','notification = {:id}','',0,0,{id:e.record.getString('notification')})){r.set('claim_expires_at','2000-01-01 00:00:00.000Z');e.app.save(r);}}e.next();},'notification_events');
+onRecordCreateExecute(e=>{if(e.record.getString('event_type')==='claimed' && e.app.findRecordById('notifications',e.record.getString('notification')).getString('subject')==='Synthetic claim failure')throw new Error('Synthetic claim event failure');e.next();},'notification_events');
 onRecordCreateExecute(e=>{if(e.record.id==='dirfailure00001')throw new Error('Synthetic directory failure');e.next();},'user_directory');
 ''')
-        common=[str(Path(binary).resolve()),'--dir',str(Path(tmp)/'pb_data'),'--migrationsDir',str(ROOT/'pb_migrations'),'--hooksDir',str(hooks)]
+        migrations=ROOT/'pb_migrations'
+        if fixture_migrations:
+            migrations=Path(tmp)/'pb_migrations';shutil.copytree(ROOT/'pb_migrations',migrations)
+            for name,source in fixture_migrations.items():(migrations/name).write_text(source)
+        common=[str(Path(binary).resolve()),'--dir',str(Path(tmp)/'pb_data'),'--migrationsDir',str(migrations),'--hooksDir',str(hooks)]
         child_env=dict(os.environ)
         child_env.update(env or {})
         result=subprocess.run(common+['superuser','upsert','admin@example.com','SyntheticAdminPassword123!'],cwd=ROOT,capture_output=True,text=True,env=child_env)

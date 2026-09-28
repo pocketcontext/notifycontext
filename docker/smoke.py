@@ -226,14 +226,17 @@ def record_snapshot(client, notification_id):
 
 
 def write_record(client, user_id):
-    record = json.loads(client.run('create', 'notifications', json.dumps({'subject': 'Synthetic operational handoff', 'body_markdown': '**Review** the synthetic document.', 'kind': 'review_requested', 'ack_required': True, 'submission_key': 'smoke-initial', 'recipients': [user_id], 'references': [{'kind': 'document', 'label': 'Synthetic document', 'url': 'https://example.com/document'}]})))
+    record = json.loads(client.run('create', 'notifications', json.dumps({'subject': 'Synthetic operational handoff', 'body_markdown': '**Review** the synthetic document.', 'kind': 'review_requested', 'ack_required': True, 'submission_key': 'smoke-initial', 'recipients': [user_id], 'recipient_emails': ['future-colleague@example.test'], 'references': [{'kind': 'document', 'label': 'Synthetic document', 'url': 'https://example.com/document'}]})))
     notification_id = record['id']
-    recipient_id, revision = client.sql(f"SELECT id,revision FROM notification_recipients WHERE notification = '{notification_id}'")[0]
+    recipient_id, revision = client.sql(f"SELECT id,revision FROM notification_recipients WHERE notification = '{notification_id}' AND recipient = '{user_id}'")[0]
     status, _, reply = http('PATCH', client.base + '/api/collections/notification_recipients/records/' + recipient_id,
                            {'expected_revision': revision, 'action': 'acknowledge', 'acknowledgement_markdown': 'Received; synthetic review planned.'}, client.token)
     check(status == 200 and bool(reply.get('acknowledged_at')), 'synthetic recipient acknowledgement is persisted')
     client.run('create', 'user_status', json.dumps({'availability': 'busy', 'message': 'Synthetic review', 'expires_at': '2099-01-01T12:00:00Z'}))
     client.run('create', 'notification_preferences', json.dumps({'alerts_paused_until': '2099-01-01T12:00:00Z'}))
+    pending = client.sql(f"SELECT recipient,addressed_email,claimed_at,claim_expires_at FROM notification_recipients WHERE notification = '{notification_id}' AND recipient = ''")
+    check(len(pending) == 1 and pending[0][1] == 'future-colleague@example.test' and not pending[0][2] and bool(pending[0][3]),
+          'pending email destination and expiry are stored without an auth identity')
     snapshot = record_snapshot(client, notification_id)
     check(all(snapshot.values()) and len(snapshot['notification_events']) == 2,
           'populated fixture includes all seven SQL tables and publication/acknowledgement history')

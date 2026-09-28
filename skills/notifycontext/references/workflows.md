@@ -11,6 +11,8 @@ python3 "$NC" backlog --unread
 python3 "$NC" backlog --awaiting-ack --overdue
 python3 "$NC" backlog --search 'supplier renewal' --include-archived --include-withdrawn
 python3 "$NC" backlog --sent --awaiting-ack
+python3 "$NC" backlog --sent --awaiting-signup
+python3 "$NC" backlog --sent --expired-signup
 python3 "$NC" backlog --since '2026-01-01T00:00:00Z' --before '2027-01-01T00:00:00Z'
 ```
 
@@ -25,6 +27,18 @@ python3 "$NC" publish - <<'JSON'
 {"subject":"Supplier renewal ready for review","body_markdown":"## Next step\nPlease review the renewal terms.","kind":"review_requested","ack_required":true,"submission_key":"retain-one-stable-key-per-send","recipients":["recipient000001"],"references":[{"kind":"document","label":"Renewal terms","url":"https://example.com/renewal","source_system":"documents"}]}
 JSON
 ```
+
+To address a colleague before signup, use their explicitly supplied Workspace email instead of guessing a user ID:
+
+```sh
+python3 "$NC" publish - <<'JSON'
+{"subject":"Renewal terms ready","body_markdown":"Please review the supplier renewal when you join.","kind":"review_requested","ack_required":true,"submission_key":"retain-a-new-stable-key-for-this-send","recipient_emails":["colleague@example.com"]}
+JSON
+```
+
+Use the deployment's trusted Workspace domain, not the synthetic example domain. You may combine `recipients` and `recipient_emails` up to 100 total entries. The server normalizes emails and deduplicates destinations. This sends **no email invitation**. A pending recipient must sign in with verified Google Workspace within 30 days; password login cannot claim it. A withdrawn or expired pending notification is never automatically delivered later. To send again after expiry, the user must authorize a new notification with a new submission key.
+
+`backlog --sent` retains pending rows even without a directory match. Output includes `recipient_name`, `addressed_email`, `claimed_at`, `claim_expires_at` and `signup_status`. `awaiting_signup` means not yet claimed and before expiry, `expired` means its claim deadline passed, `claimed` means email addressing is bound to an account, and `registered` means an ID-addressed account. `withdrawn` takes precedence. None of these states proves reading or acknowledgement. `--awaiting-signup` and `--expired-signup` require `--sent`, are mutually exclusive and exclude withdrawn records even with `--include-withdrawn`.
 
 Bulk actions target **recipient record IDs**, not notification IDs or user IDs. Use the revision returned by the backlog/read. Each request is independently applied; this is not an all-or-nothing batch. Output includes per-item results and any unattempted items. Partial failure exits nonzero.
 

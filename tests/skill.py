@@ -15,7 +15,7 @@ def main():
     parser.add_argument('--binary', required=True)
     parser.add_argument('--write-schema', action='store_true')
     args = parser.parse_args()
-    with server(args.binary) as request, tempfile.TemporaryDirectory(prefix='notifycontext-skill-') as tmp:
+    with server(args.binary, env={'NOTIFYCONTEXT_GOOGLE_WORKSPACE_DOMAIN': 'example.com'}) as request, tempfile.TemporaryDirectory(prefix='notifycontext-skill-') as tmp:
         op = operator(request)
         sender, token = account(request, op, 'sender@example.com')
         recipient, recipient_token = account(request, op, 'recipient@example.com')
@@ -73,6 +73,35 @@ def main():
         cli('update', 'notification_recipients', row['id'], '{"action":"read"}', expected=2)
         env['NOTIFYCONTEXT_USER_EMAIL'] = 'sender@example.com'
         assert json.loads(cli('backlog', '--sent', '--include-archived'))['count'] == 5
+        pending_payload = dict(payload, recipients=[], recipient_emails=['NewColleague@Example.com'], submission_key='pending-one')
+        pending = json.loads(cli('publish', json.dumps(pending_payload)))
+        assert json.loads(cli('publish', json.dumps(pending_payload)))['id'] == pending['id']
+        for index in range(2):
+            cli('publish', json.dumps(dict(pending_payload, submission_key='pending-extra-' + str(index))))
+        mixed = dict(payload, submission_key='mixed-addressing',
+                     recipient_emails=['RECIPIENT@example.com', 'another@example.com'])
+        mixed_notification = json.loads(cli('publish', json.dumps(mixed)))
+        mixed_rows = query(request, "SELECT * FROM notification_recipients WHERE notification='" + mixed_notification['id'] + "'", token)
+        assert len(mixed_rows) == 2, 'Email + ID of same account must deduplicate'
+        pending_backlog = json.loads(cli('backlog', '--sent', '--awaiting-signup', '--page-size', '2'))
+        assert pending_backlog['count'] == 4 and pending_backlog['complete']
+        assert all(row['recipient'] == '' and not row['recipient_name'] and row['signup_status'] == 'awaiting_signup'
+                   and row['claim_expires_at'] and not row['claimed_at'] for row in pending_backlog['items'])
+        assert {row['addressed_email'] for row in pending_backlog['items']} == {'newcolleague@example.com', 'another@example.com'}
+        assert json.loads(cli('backlog', '--sent', '--expired-signup'))['count'] == 0
+        assert json.loads(cli('backlog', '--sent'))['count'] == 10
+        cli('backlog', '--awaiting-signup', expected=2)
+        # Creating a verified password account after publication does not claim pending history.
+        account(request, op, 'newcolleague@example.com')
+        env['NOTIFYCONTEXT_USER_EMAIL'] = 'newcolleague@example.com'
+        assert json.loads(cli('backlog'))['count'] == 0
+        env['NOTIFYCONTEXT_USER_EMAIL'] = 'sender@example.com'
+        assert json.loads(cli('publish', json.dumps(pending_payload)))['id'] == pending['id']
+        assert json.loads(cli('backlog', '--sent', '--awaiting-signup'))['count'] == 4
+        cli('update', 'notifications', pending['id'], json.dumps(dict(expected_revision=pending['revision'], action='withdraw', withdrawal_reason='Superseded')))
+        assert json.loads(cli('backlog', '--sent', '--awaiting-signup', '--include-withdrawn'))['count'] == 3
+        history = json.loads(cli('backlog', '--sent', '--include-withdrawn'))
+        assert next(row for row in history['items'] if row['notification_id'] == pending['id'])['signup_status'] == 'withdrawn'
         cli('logout')
     print('Portable skill, schema, backlog and explicit mutation checks passed.')
 

@@ -7,6 +7,8 @@ npm ci
 npm run build
 ```
 
+The composer accepts directory selections, comma-separated recipient emails, or both. Existing verified active accounts receive notifications immediately. A new colleague has 30 days to sign in and claim a pending notification; no invitation email is sent. Sent details preserve recipients without directory accounts and show “Awaiting first sign-in,” “Expired,” or “Withdrawn.” Email addresses are shown only where the authenticated sender/recipient SQL policy permits.
+
 The production build writes `../pb_public/` (generated and untracked). Run the pinned PocketContext binary from the application root; `pb_hooks/frontend.pb.js` serves these public assets. `npm run dev` starts a local Vite client and proxies `/api` to a local server at `127.0.0.1:8090`.
 
 Use your admitted Google Workspace account. The expandable local sign-in form supports operator-provisioned test accounts. Tokens remain in browser memory; reloading requires sign-in. SQL pagination adapts to response byte truncation. Fetching and opening detail do not mark read or acknowledge; use the explicit action buttons.

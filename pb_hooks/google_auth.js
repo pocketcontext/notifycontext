@@ -10,7 +10,7 @@ function domain() {
   return value;
 }
 
-function authenticate(e) {
+function validatedAuthenticate(e) {
   const workspace = domain();
   if (e.record && e.record.getBool("disabled")) {
     throw new ForbiddenError("This NotifyContext account is disabled.");
@@ -56,7 +56,13 @@ function authenticate(e) {
   // names. Google supplies identity, PocketBase generates the account password.
   const name = typeof user.name === "string" ? user.name.trim().slice(0, 200) : "";
   e.createData = {email: email, name: name || email.split("@")[0].slice(0, 200)};
+  if(workspace)e.set('notifycontextTrustedGoogleEmail',email.toLowerCase());
   return e.next();
+}
+
+function authenticate(e){
+  const original=e.app;
+  return original.runInTransaction(app=>{e.app=app;try{return validatedAuthenticate(e);}finally{e.app=original;}});
 }
 
 module.exports = {domain, authenticate};
