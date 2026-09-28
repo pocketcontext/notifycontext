@@ -14,16 +14,18 @@
 
 CI exposed a read/acknowledgement race, fixed before publication: recipient controls are disabled during a write and existing acknowledgement drafts survive non-acknowledgement refreshes. A deterministic browser regression covers the interaction.
 
-## Deployment prepared, not running
+## Production deployment — 28 September 2026
 
-Deployment through the existing ONCE host is authorized. The scaffold declares `notify.pocketcontext.com`, one CPU and 512 MiB. Build/dry-run passed; read-only host inspection confirmed ARM64, ONCE v0.3.3, available capacity and no existing NotifyContext container. No sibling application or remote key was changed.
+Running at https://notify.pocketcontext.com on the existing ARM64 ONCE v0.3.3 host, with one CPU, 512 MiB and automatic updates disabled. The initial deployment used the immutable multi-platform digest above. Use the installed dedicated locked graceful-stop wrapper for subsequent updates.
 
-App-specific placeholders/defaults are in `/home/jack/code/pocketcontext/once-pocketcontext/.envrc.private`, ignored by Git and mode 0600. A dedicated local deployment key was generated and its reference recorded. The following `COLORS_PAR_APP_NOTIFYCONTEXT_` fields remain empty:
+App-specific configuration remains in ignored mode-0600 `/home/jack/code/pocketcontext/once-pocketcontext/.envrc.private`. Operator credentials reuse the existing sibling credentials as requested. The dedicated replica uses the EU R2 endpoint, bucket `notifycontext-backup` and prefix `once-pocketcontext/notifycontext`. Disposable-object HEAD/write/read/list/delete checks passed. No secret values are stored in this repository.
 
-- `SUPERUSER_EMAIL`, `SUPERUSER_PASSWORD`
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- `LITESTREAM_ENDPOINT`, `LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY`
+Google redirect URIs are `http://127.0.0.1:8765/callback` and `https://notify.pocketcontext.com/api/oauth2-redirect`; trusted Workspace domain is `pocketcontext.com`. The configured default `users` Google provider was verified through the authenticated API.
 
-Complete the dedicated Google Web OAuth client and private R2 setup before production launch. Bucket/prefix defaults are `notifycontext-backup` and `once-pocketcontext/notifycontext`; trusted Workspace domain is `pocketcontext.com`. Google redirect URIs are `http://127.0.0.1:8765/callback` and `https://notify.pocketcontext.com/api/oauth2-redirect`. See [deployment preparation](docs/deployment.md).
+Targeted DNS created only the NotifyContext record; all 17 existing managed DNS resources were preserved. The host resolver had cached an earlier NXDOMAIN, so initial deployment used a temporary exact-host origin entry, removed immediately afterward. Cloudflare proxying remains enabled. Installation of the restricted deployment key preserved all 14 sibling key lines.
 
-Remaining work after credentials: verify the dedicated bucket with a disposable object probe, review/apply targeted DNS, deploy the pinned image with one writer and automatic updates disabled, install the dedicated locked wrapper, verify runtime revision/health/authentication and replica recovery. Real Google browser sign-in and native desktop-alert delivery remain user-device checks. No production instance or DNS record has been created for NotifyContext.
+Public HTTPS health, UI/security headers, blocked anonymous SQL and signup, ordinary-user authentication, schema and filtered SQL passed. The synthetic verification identity was disabled after checks; no notifications were sent. Live Google browser sign-in and native desktop-alert delivery remain user-device checks.
+
+Production replica recovery passed using a fresh disposable volume: Litestream quick integrity check, restored startup/operator authentication, default identity, required schema and Google configuration. The restored app ran only on loopback with replication disabled and no replica credentials; temporary resources were removed. Desktop and mobile Chromium checks passed for assets, rendering, console errors, keyboard focus and horizontal overflow.
+
+The dedicated SSH key successfully exercised a same-release update through the locked graceful-stop wrapper. Runtime source/server revisions, single-writer container count, CPU/memory limits and disabled automatic updates were verified afterward. All 13 sibling containers retained their IDs, images, running states and resource limits; public health remained successful.
