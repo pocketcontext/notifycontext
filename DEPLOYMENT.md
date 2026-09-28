@@ -1,5 +1,24 @@
 # NotifyContext release and deployment
 
+## Pending email delivery release — 28 September 2026
+
+Deployed at https://notify.pocketcontext.com from source `2be8d49338bcbdf12325c39212b5fb60b3125799`. The PocketContext pin remains `a92b0de5e1b66b6d3b6135b90092d2d6da5f7cc8`.
+
+- Public image: `ghcr.io/pocketcontext/notifycontext:latest` and `sha-2be8d49`.
+- Multi-platform digest: `sha256:9c7a7a19302f6565bb5bd1d7367fd58ceb7b674a8865e20c2f957519f5c16283`.
+- AMD64 manifest: `sha256:cd3158ed4fbe56e4ebad76ccde67f11f04e1b383de4e58d67d0e3ba252fc63bd`.
+- ARM64 manifest: `sha256:f33cf83d8ae5e31afd1bd712052b8bc9b798d921c3e9b8967f0a42487ad2f566`.
+
+[Release CI](https://github.com/pocketcontext/notifycontext/actions/runs/36391659180) and [application CI](https://github.com/pocketcontext/notifycontext/actions/runs/36391658930) passed. This includes the additive migration, trusted Google pending claims, rollback, races, expiry/withdrawal, privacy, legacy publication-key compatibility, copied skill, eleven browser tests and container recovery with pending recipients. Anonymous manifest/configuration access verified both image architectures and the source labels.
+
+The browser and skill now accept Workspace email destinations before first sign-in. Existing eligible accounts link immediately; other addresses remain pending for 30 days and can be claimed only by the matching verified Google identity. No invitation email is sent. Sent backlog filters distinguish awaiting signup and expired recipients. See the data model and skill workflows for exact semantics.
+
+A production API backup was created and verified before migration. The restricted-key locked update passed, and runtime revision/digest, unchanged server pin, one writer, one CPU, 512 MiB and disabled automatic updates were verified. All thirteen sibling containers and existing authorized keys were preserved. Public HTTPS, new browser assets, authentication and the new private recipient columns passed post-deployment checks; the synthetic verification account was disabled and no notifications were sent.
+
+Post-update recovery from the production EU R2 replica passed. The three new fields were present in the disposable restored database before application startup, proving the replica contained the migration. Integrity, restored authentication, Google configuration and API schema passed with replication disabled and loopback-only access. Temporary containers and volume were removed.
+
+Live Google browser sign-in and native desktop-alert delivery remain user-device checks. Earlier release evidence follows; its image digest is historical.
+
 ## Published release — 28 September 2026
 
 - Public repository: https://github.com/pocketcontext/notifycontext
