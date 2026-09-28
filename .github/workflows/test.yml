@@ -1,0 +1,76 @@
+name: Notification integration
+on:
+  push:
+  pull_request:
+  # image.yml calls this workflow before it publishes an image.
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: notifycontext
+          persist-credentials: false
+      - name: Test deployment orchestration
+        run: python3 notifycontext/tests/deploy_workflow.py
+      - name: Read server revision
+        id: server
+        shell: bash
+        run: |
+          revision=$(cat notifycontext/POCKETCONTEXT_VERSION)
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: pocketcontext/pocketcontext
+          ref: ${{ steps.server.outputs.revision }}
+          path: pocketcontext
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: pocketcontext/go.mod
+          cache-dependency-path: pocketcontext/go.sum
+      - name: Build server
+        working-directory: pocketcontext
+        # The flags of pocketcontext's Makefile.
+        run: CGO_ENABLED=1 go build -tags sqlite_math_functions -o bin/pocketcontext ./cmd/pocketcontext
+      - name: Test notifications
+        run: python3 notifycontext/tests/integration.py --binary pocketcontext/bin/pocketcontext
+      - name: Test authentication and deployment settings
+        run: python3 notifycontext/tests/auth.py --binary pocketcontext/bin/pocketcontext
+      - name: Test Google OAuth claims and Workspace signup
+        run: python3 notifycontext/tests/oauth_integration.py --binary pocketcontext/bin/pocketcontext
+      - name: Test first-start deployment settings
+        run: python3 notifycontext/tests/deploy.py --binary pocketcontext/bin/pocketcontext
+      - name: Test installable skill
+        run: python3 notifycontext/tests/skill.py --binary pocketcontext/bin/pocketcontext
+      - name: Test OAuth client
+        run: python3 notifycontext/tests/oauth.py
+      - name: Test privacy and batch rejection
+        run: python3 notifycontext/tests/security.py --binary pocketcontext/bin/pocketcontext
+      - name: Test populated backup recovery
+        run: python3 notifycontext/tests/backup.py --binary pocketcontext/bin/pocketcontext
+      - name: Test client backlog behavior
+        run: python3 notifycontext/tests/client.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: notifycontext/frontend/package-lock.json
+      - name: Install frontend
+        working-directory: notifycontext/frontend
+        run: npm ci
+      - name: Build frontend
+        working-directory: notifycontext/frontend
+        run: npm run build
+      - name: Install browser fixture
+        working-directory: notifycontext/frontend
+        run: npx playwright install --with-deps chromium
+      - name: Test browser behavior
+        working-directory: notifycontext/frontend
+        run: npm test
+      - name: Test browser against pinned server
+        run: python3 notifycontext/frontend/tests/live.py --binary pocketcontext/bin/pocketcontext

@@ -1,0 +1,92 @@
+{
+  "authCollection": "users",
+  "tables": {
+    "user_directory": [
+      "id",
+      "name"
+    ],
+    "notifications": [
+      "id",
+      "sender",
+      "subject",
+      "body_markdown",
+      "kind",
+      "ack_required",
+      "due_at",
+      "submission_key",
+      "withdrawn_at",
+      "withdrawal_reason",
+      "revision",
+      "created",
+      "updated"
+    ],
+    "notification_recipients": [
+      "id",
+      "notification",
+      "recipient",
+      "read_at",
+      "acknowledged_at",
+      "archived_at",
+      "acknowledgement_markdown",
+      "revision",
+      "created",
+      "updated"
+    ],
+    "notification_references": [
+      "id",
+      "notification",
+      "kind",
+      "label",
+      "url",
+      "source_system",
+      "external_id",
+      "created",
+      "updated"
+    ],
+    "notification_events": [
+      "id",
+      "notification",
+      "notification_recipient",
+      "actor",
+      "event_type",
+      "created",
+      "updated"
+    ],
+    "user_status": [
+      "id",
+      "user",
+      "availability",
+      "message",
+      "expires_at",
+      "revision",
+      "created",
+      "updated"
+    ],
+    "notification_preferences": [
+      "id",
+      "user",
+      "alerts_paused_until",
+      "revision",
+      "created",
+      "updated"
+    ]
+  },
+  "timeoutMs": 2000,
+  "maxRows": 500,
+  "maxBytes": 1048576,
+  "snapshot": {
+    "filters": {
+      "user_directory": "1 = 1",
+      "notifications": "(notifications.sender = :requester OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.notification = notifications.id AND r.recipient = :requester))",
+      "notification_recipients": "recipient = :requester OR EXISTS (SELECT 1 FROM notifications n WHERE n.id = notification_recipients.notification AND n.sender = :requester)",
+      "notification_references": "EXISTS (SELECT 1 FROM notifications n WHERE n.id = notification_references.notification AND (n.sender = :requester OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.notification = n.id AND r.recipient = :requester)))",
+      "notification_events": "EXISTS (SELECT 1 FROM notifications n WHERE n.id = notification_events.notification AND (n.sender = :requester OR ((n.sender = :requester OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.notification = n.id AND r.recipient = :requester)) AND (notification_events.notification_recipient = '' OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.id = notification_events.notification_recipient AND r.recipient = :requester)))))",
+      "user_status": "1 = 1",
+      "notification_preferences": "user = :requester"
+    },
+    "timeoutMs": 5000,
+    "maxRows": 100000,
+    "maxBytes": 33554432,
+    "maxConcurrent": 4
+  }
+}

@@ -1,0 +1,19 @@
+# Proposed isolated application entry; not applied or provisioned.
+- host: notify.pocketcontext.com
+  image: ghcr.io/pocketcontext/notifycontext:latest
+  github: pocketcontext/notifycontext
+  cpus: 1
+  memory: 512
+  env:
+    NOTIFYCONTEXT_SUPERUSER_EMAIL: app-notifycontext-superuser-email
+    NOTIFYCONTEXT_SUPERUSER_PASSWORD: app-notifycontext-superuser-password
+    NOTIFYCONTEXT_TRUSTED_PROXY_HEADER: app-notifycontext-trusted-proxy-header
+    NOTIFYCONTEXT_GOOGLE_CLIENT_ID: app-notifycontext-google-client-id
+    NOTIFYCONTEXT_GOOGLE_CLIENT_SECRET: app-notifycontext-google-client-secret
+    NOTIFYCONTEXT_GOOGLE_WORKSPACE_DOMAIN: app-notifycontext-google-workspace-domain
+    LITESTREAM_BUCKET: app-notifycontext-litestream-bucket
+    LITESTREAM_PATH: app-notifycontext-litestream-path
+    LITESTREAM_REGION: app-notifycontext-litestream-region
+    LITESTREAM_ENDPOINT: app-notifycontext-litestream-endpoint
+    LITESTREAM_ACCESS_KEY_ID: app-notifycontext-litestream-access-key-id
+    LITESTREAM_SECRET_ACCESS_KEY: app-notifycontext-litestream-secret-access-key

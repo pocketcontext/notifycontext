@@ -1,0 +1,11 @@
+pb_data/
+pb_public/
+.env*
+*.log
+__pycache__/
+*.pyc
+node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+.private/

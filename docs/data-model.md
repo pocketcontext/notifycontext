@@ -1,0 +1,14 @@
+# NotifyContext application contract
+Default PocketBase users; ordinary admitted Workspace colleagues share directory/status only. No role bypass for notification privacy. SQL is filtered, business REST reads/realtime locked; writes use REST. User directory id/name (no emails). References optional; any work domain.
+Collections:
+- notifications: sender relation users, subject text max 200, body_markdown text max 20000, kind fyi|review_requested|action_required, ack_required bool, due_at optional date, submission_key text max 200 unique with sender, withdrawn_at optional date, withdrawal_reason text max 2000, revision integer, created/updated.
+- notification_recipients: notification relation, recipient relation users, read_at/acknowledged_at/archived_at optional dates, acknowledgement_markdown max 4000, revision, created/updated. Unique notification/recipient. Sender sees all recipients, recipient only self.
+- notification_references: notification, kind document|task|record|url, label max 200, url max 2000 http(s) only, source_system max 100 optional, external_id max 200 optional, created/updated.
+- notification_events: notification, notification_recipient optional, actor users, event_type, created. Immutable server managed. Sender sees all, recipient sees publication/withdrawal and own actions only.
+- user_status: user unique relation, availability available|busy|in_a_meeting|away|not_set, message max 200, expires_at optional date, revision, created/updated. Owner writes, all colleagues read. Expired displays not_set.
+- notification_preferences: user unique relation, alerts_paused_until optional date, revision, created/updated. Owner only.
+Publish POST /api/collections/notifications/records with subject,body_markdown,kind,ack_required,due_at,submission_key, recipients:[user IDs], references:[{kind,label,url,source_system,external_id}]. Server attribution, timestamps and recipient/reference/event writes atomic. Identical retry returns existing; changed payload for same sender/key conflicts. Recipient set max 100, references max 30. Sender-supplied sender/id/timestamps rejected or overwritten safely.
+Withdraw PATCH notifications/ID {expected_revision, action:"withdraw", withdrawal_reason}. No editing content/deleting.
+Recipient PATCH notification_recipients/ID {expected_revision,action:"read"|"acknowledge"|"archive"|"unarchive",acknowledgement_markdown optional}. Server timestamps, owner only, idempotent action retries when already satisfied. Acknowledgement does not mean task complete. No other recipient mutations.
+Status/preferences POST owner record then PATCH with expected_revision; server owns user. Status expiry displayed at read time, not auto-rewritten.
+No push in v1. Browser polling reads do not mark read. Native alerts require open app and permission. Pauses affect alerts only. No calendar integration, presence, reminders, attachments or threads.

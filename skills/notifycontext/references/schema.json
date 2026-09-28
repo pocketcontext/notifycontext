@@ -1,0 +1,271 @@
+{
+  "tables": [
+    {
+      "name": "notification_events",
+      "columns": [
+        {
+          "name": "actor",
+          "type": "TEXT"
+        },
+        {
+          "name": "created",
+          "type": "TEXT"
+        },
+        {
+          "name": "event_type",
+          "type": "TEXT"
+        },
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "notification",
+          "type": "TEXT"
+        },
+        {
+          "name": "notification_recipient",
+          "type": "TEXT"
+        },
+        {
+          "name": "updated",
+          "type": "TEXT"
+        }
+      ]
+    },
+    {
+      "name": "notification_preferences",
+      "columns": [
+        {
+          "name": "alerts_paused_until",
+          "type": "TEXT"
+        },
+        {
+          "name": "created",
+          "type": "TEXT"
+        },
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "revision",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "updated",
+          "type": "TEXT"
+        },
+        {
+          "name": "user",
+          "type": "TEXT"
+        }
+      ]
+    },
+    {
+      "name": "notification_recipients",
+      "columns": [
+        {
+          "name": "acknowledged_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "acknowledgement_markdown",
+          "type": "TEXT"
+        },
+        {
+          "name": "archived_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "created",
+          "type": "TEXT"
+        },
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "notification",
+          "type": "TEXT"
+        },
+        {
+          "name": "read_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "recipient",
+          "type": "TEXT"
+        },
+        {
+          "name": "revision",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "updated",
+          "type": "TEXT"
+        }
+      ]
+    },
+    {
+      "name": "notification_references",
+      "columns": [
+        {
+          "name": "created",
+          "type": "TEXT"
+        },
+        {
+          "name": "external_id",
+          "type": "TEXT"
+        },
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "kind",
+          "type": "TEXT"
+        },
+        {
+          "name": "label",
+          "type": "TEXT"
+        },
+        {
+          "name": "notification",
+          "type": "TEXT"
+        },
+        {
+          "name": "source_system",
+          "type": "TEXT"
+        },
+        {
+          "name": "updated",
+          "type": "TEXT"
+        },
+        {
+          "name": "url",
+          "type": "TEXT"
+        }
+      ]
+    },
+    {
+      "name": "notifications",
+      "columns": [
+        {
+          "name": "ack_required",
+          "type": "BOOLEAN"
+        },
+        {
+          "name": "body_markdown",
+          "type": "TEXT"
+        },
+        {
+          "name": "created",
+          "type": "TEXT"
+        },
+        {
+          "name": "due_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "kind",
+          "type": "TEXT"
+        },
+        {
+          "name": "revision",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "sender",
+          "type": "TEXT"
+        },
+        {
+          "name": "subject",
+          "type": "TEXT"
+        },
+        {
+          "name": "submission_key",
+          "type": "TEXT"
+        },
+        {
+          "name": "updated",
+          "type": "TEXT"
+        },
+        {
+          "name": "withdrawal_reason",
+          "type": "TEXT"
+        },
+        {
+          "name": "withdrawn_at",
+          "type": "TEXT"
+        }
+      ]
+    },
+    {
+      "name": "user_directory",
+      "columns": [
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "name",
+          "type": "TEXT"
+        }
+      ]
+    },
+    {
+      "name": "user_status",
+      "columns": [
+        {
+          "name": "availability",
+          "type": "TEXT"
+        },
+        {
+          "name": "created",
+          "type": "TEXT"
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "message",
+          "type": "TEXT"
+        },
+        {
+          "name": "revision",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "updated",
+          "type": "TEXT"
+        },
+        {
+          "name": "user",
+          "type": "TEXT"
+        }
+      ]
+    }
+  ],
+  "permissionModel": "filtered-snapshot",
+  "limits": {
+    "timeoutMs": 2000,
+    "maxRows": 500,
+    "maxBytes": 1048576
+  },
+  "snapshotLimits": {
+    "maxBytes": 33554432,
+    "maxConcurrent": 4,
+    "timeoutMs": 5000,
+    "maxRows": 100000
+  }
+}

@@ -1,0 +1,2 @@
+# NotifyContext
+Read README.md and docs/data-model.md. General colleague notifications and backlog triage, not coding-specific. Use default users, verified Workspace JIT, filtered SQL reads and independent REST write authorization. Only senders and recipients see content; no admin bypass. Notification publication is atomic and deduplicated; content immutable after publication. Explicit recipient actions only: background reads never acknowledge. Keep status and alert pauses separate. Tests use synthetic isolated databases. No provisioning or deployment authorized.
