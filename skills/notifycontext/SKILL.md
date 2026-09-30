@@ -26,3 +26,7 @@ Run `whoami` and `check` when establishing a session. `check` compares the live 
 Only change the user's own status/preferences. Status (available, busy, in a meeting, away) communicates expectations; pausing desktop alerts is separate and never blocks inbox delivery. Interpret an expired status as `not_set`. Do not infer online presence or calendar activity. Browser desktop alerts require an open app and permission; this release has no background push.
 
 The client reads through filtered SQL and writes through authenticated REST. Do not use direct database access. Keep token caches private; never paste authentication output or credentials into notifications.
+
+## Browser links
+
+Include `NOTIFYCONTEXT_URL` (without its trailing slash) plus `/#/notifications/<notification-id>` when reporting a notification. Use its notification ID, not a recipient-row ID. The authenticated reader opens the record even when it is archived or outside the current result page. Published content is immutable, but withdrawal and recipient state are current; there is no historical-state URL. Links grant no access and opening them never marks read, acknowledges or archives. Do not copy private subjects or previews into a wiki with broader visibility.
