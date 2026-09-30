@@ -65,3 +65,14 @@ browser back navigation and absence of implicit acknowledgements. The production
 frontend build passed. The browser test server now uses a configurable dedicated
 port (`NOTIFYCONTEXT_TEST_PORT`) and refuses to reuse an unrelated running server.
 Container config/smoke/populated-restore remain release CI gates.
+
+## Persistent SDK browser sessions — 30 September 2026
+
+All eleven README Python validation commands passed against the unchanged clean
+`a92b0de` pin using isolated synthetic databases. Node.js 22 production build,
+16 Playwright tests and the actual-server browser workflow passed. New coverage
+checks cross-tab login/logout, persistence across reload, account changes clearing
+private views/drafts, delayed responses and refresh after logout, and same-account
+token renewal preserving an open draft. No implicit acknowledgement was added.
+The official PocketBase JS SDK is pinned to 0.28.1 in the frontend lockfile.
+Container smoke and populated recovery remain release CI gates.

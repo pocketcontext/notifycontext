@@ -1,11 +1,7 @@
-import PocketBase, {BaseAuthStore} from 'pocketbase';
+import {pb, signIn, refreshSession, sessionIdentity} from './auth.js';
 import {escapeHTML as e, sqlQuote as q, markdown, rows, statusLabel, kindLabel, effectiveStatus, alertDecision} from './core.js';
 import './style.css';
 
-// Keep credentials in memory; no auth tokens in localStorage, URLs or notification payloads.
-const pb = new PocketBase(location.origin, new BaseAuthStore());
-pb.autoCancellation(false);
-pb.afterSend=(response,data)=>{if(response.status===401 && pb.authStore.record){pb.authStore.clear();login();report('Your session ended. Sign in again to continue.',true);}return data;};
 const state = {view:'inbox', filter:'all', search:'', page:0, list:[], directory:[], statuses:[], preferences:null, latest:null, lastPoll:0, connected:false, selected:null};
 const pageSize=30;
 function routeState() {
@@ -50,7 +46,7 @@ function report(message, error=false) { const box=$('#notice'); if(box){box.text
 function friendly(error) { return error?.response?.message || error.message || 'Something went wrong. Please try again.'; }
 async function query(sql) {
   let result;
-  try {result=await pb.send('/api/context/query',{method:'POST',body:{sql}});}catch(error){if(error.status===403 && pb.authStore.record){pb.authStore.clear();login();report('Your access changed. Sign in again to continue.',true);}throw error;}
+  try {result=await pb.send('/api/context/query',{method:'POST',body:{sql}});}catch(error){throw error;}
   if (!result.truncated) return rows(result);
   const match=sql.match(/LIMIT (\d+)(?: OFFSET (\d+))?$/);
   if(!match || Number(match[1])<=1)throw new Error('A result is too large. Narrow your search.');
@@ -65,8 +61,8 @@ async function pageAll(table, where='', order='id') {
 function login() {
   clearInterval(timer);clearTimeout(searchTimer);sessionEpoch++;listGeneration++;pollBusy=false;Object.assign(state,{view:'inbox',filter:'all',search:'',page:0,list:[],directory:[],statuses:[],preferences:null,latest:null,lastPoll:0,connected:false,selected:null,pendingAlerts:new Map()});
   $('#app').innerHTML=`<main class="login"><div class="brand"><span class="brand-mark">N</span> NotifyContext</div><section class="login-card"><p class="eyebrow">KEEP WORK MOVING</p><h1>A clear place for<br>your next handoff.</h1><p class="muted">Updates, requests and acknowledgements.<br>For every kind of work.</p><button class="primary wide" id="google">Continue with Google</button><p class="fine">Use your organization's Google Workspace account.</p><details><summary>Local test sign-in</summary><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="secondary wide">Sign in</button></form></details><div id="notice" class="notice" role="status" hidden></div></section><p class="login-foot">Your attention, thoughtfully organized.</p></main>`;
-  $('#google').onclick=async()=>{try {await pb.collection('users').authWithOAuth2({provider:'google'});await start();}catch(error){report(friendly(error),true);}};
-  $('#login-form').onsubmit=async event=>{event.preventDefault(); const data=new FormData(event.target);try {await pb.collection('users').authWithPassword(data.get('email'),data.get('password'));await start();}catch(error){report(friendly(error),true);}};
+  $('#google').onclick=async()=>{try {await signIn(null,null,true);}catch(error){report(friendly(error),true);}};
+  $('#login-form').onsubmit=async event=>{event.preventDefault(); const data=new FormData(event.target);try {await signIn(data.get('email'),data.get('password'));}catch(error){report(friendly(error),true);}};
 }
 async function start() {
   const epoch=sessionEpoch,current=pb.authStore.record;
@@ -76,7 +72,7 @@ async function start() {
     $('#copy-search').onclick=()=>void navigator.clipboard.writeText(new URL(routeHref(null),location.href).href).then(()=>report('Search link copied.')).catch(()=>report('Unable to copy link.',true));
   $('#compose').onclick=compose;
   $('#settings').onclick=settings;
-  $('#signout').onclick=()=>{pb.authStore.clear();Object.assign(state,{latest:null,selected:null,page:0,view:'inbox'});login();};
+  $('#signout').onclick=()=>pb.authStore.clear();
   all('[data-view]').forEach(button=>button.onclick=()=>{state.view=button.dataset.view;state.page=0;state.selected=null;all('[data-view]').forEach(b=>b.classList.toggle('active',b===button));$('#view-title').textContent=state.view==='sent'?'Sent':state.view==='archived'?'Archived':'Inbox';$('#view-description').textContent=state.view==='sent'?'Handoffs you’ve shared. Responses you’re waiting for.':state.view==='archived'?'Handled and saved for later.':'Updates to read. Requests to move forward.';$('#detail').classList.remove('open');$('#detail').innerHTML='<p>Select a notification.</p>';saveRoute();void loadList().catch(error=>report(friendly(error),true));});
   $('#search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.search=$('#search').value;state.page=0;saveRoute(true);void loadList().catch(error=>report(friendly(error),true));},250);};
   $('#filter').onchange=()=>{state.filter=$('#filter').value;state.page=0;saveRoute();void loadList().catch(error=>report(friendly(error),true));};
@@ -85,7 +81,7 @@ async function start() {
   $('#refresh').onclick=()=>poll(true);
   $('#alerts').onclick=enableAlerts;
   updateAlerts();
-  try { await directory(); await poll(true); if(state.selected)await openDetail(state.selected); } catch(error){report(friendly(error),true);}
+  try { await refreshSession(); if(epoch!==sessionEpoch)return; await directory(); if(epoch!==sessionEpoch)return; await poll(true); if(epoch!==sessionEpoch)return; if(state.selected)await openDetail(state.selected); } catch(error){report(friendly(error),true);}
   if(epoch!==sessionEpoch)return;
   timer=setInterval(()=>poll(),15000);
 
@@ -119,9 +115,11 @@ async function loadList() {
 }
 async function poll(manual=false) {
   if(pollBusy)return;
-  if(!pb.authStore.isValid){if(pb.authStore.record){pb.authStore.clear();login();report('Your session expired. Sign in again to continue.',true);}return;}
+  if(!pb.authStore.isValid){if(pb.authStore.record){pb.authStore.clear();report('Your session expired. Sign in again to continue.',true);}return;}
   pollBusy=true;const epoch=sessionEpoch;
   try {
+    await refreshSession();
+    if(epoch!==sessionEpoch)return;
     const latest=(await query(`SELECT n.id, n.created FROM notifications n JOIN notification_recipients r ON r.notification=n.id WHERE r.recipient=${q(pb.authStore.record.id)} AND (n.withdrawn_at='' OR n.withdrawn_at IS NULL) ORDER BY n.created DESC, n.id DESC LIMIT 100`));
     const unread=await query(`SELECT count(*) AS total FROM notification_recipients WHERE recipient=${q(pb.authStore.record.id)} AND (read_at='' OR read_at IS NULL) AND (archived_at='' OR archived_at IS NULL)`);
     if(epoch!==sessionEpoch)return;
@@ -133,6 +131,7 @@ async function poll(manual=false) {
     const pending=[...state.pendingAlerts.values()];
     const decision=alertDecision({latest:pending,previous:state.latest,paused,permission:'Notification' in window?Notification.permission:'unsupported',missed:pending.length>incoming.length || (state.lastPoll && Date.now()-state.lastPoll>45000)});
     if(decision) await desktopAlert(decision,pending[0]?.id);
+    if(epoch!==sessionEpoch)return;
     if(!paused)state.pendingAlerts.clear();
     state.latest=new Set(latest.map(item=>item.id));state.lastPoll=Date.now();state.connected=true;
     $('#unread-count').textContent=unread[0]?.total || 0;
@@ -140,16 +139,18 @@ async function poll(manual=false) {
     updateAlerts();
     await loadList();
     if(manual) report('Inbox is up to date. Fetching does not mark notifications read.');
-  } catch(error) {if(epoch!==sessionEpoch)return;state.connected=false;$('#connection').textContent='○ Connection interrupted · retrying';$('#connection').classList.add('offline');if(manual)report(friendly(error),true);}
+  } catch(error) {if(epoch!==sessionEpoch){if(!pb.authStore.isValid)report(friendly(error),true);return;}state.connected=false;$('#connection').textContent='○ Connection interrupted · retrying';$('#connection').classList.add('offline');if(manual)report(friendly(error),true);}
   finally {if(epoch===sessionEpoch)pollBusy=false;}
 }
 async function desktopAlert(decision,id) {
+  const epoch=sessionEpoch;
   // The Web Locks API serializes localStorage dedup across authenticated tabs.
   if(!navigator.locks)return; // No unreliable fallback that could issue duplicate alerts.
   await navigator.locks.request('notifycontext-alert',async()=>{
+    if(epoch!==sessionEpoch || !pb.authStore.isValid)return;
     const key=`notifycontext-alert:${pb.authStore.record.id}`;
     try {const seen=JSON.parse(localStorage.getItem(key)||'{}');if(seen.id===id)return;localStorage.setItem(key,JSON.stringify({id,at:Date.now()}));}catch{return;}
-    try {const alert=new Notification(decision.title,{body:decision.body,tag:'notifycontext-inbox'});alert.onclick=()=>{window.focus();if(id)void openDetail(id);alert.close();};}catch{report('Desktop alerts are unavailable here. Keep using the inbox.');}
+    try {const alert=new Notification(decision.title,{body:decision.body,tag:'notifycontext-inbox'});alert.onclick=()=>{window.focus();if(epoch===sessionEpoch && id)void openDetail(id);alert.close();};}catch{report('Desktop alerts are unavailable here. Keep using the inbox.');}
   });
 }
 function updateAlerts() {
@@ -219,4 +220,13 @@ function settings() {
     $('#pause-form').onsubmit=async event=>{event.preventDefault();const duration=Number(new FormData(event.target).get('duration'));try{const body={alerts_paused_until:duration?new Date(Date.now()+duration*60000).toISOString():''};if(state.preferences)await pb.collection('notification_preferences').update(state.preferences.id,{...body,expected_revision:state.preferences.revision});else await pb.collection('notification_preferences').create(body);await directory();updateAlerts();$('#dialog').close();report(duration?'Desktop alerts paused. Your inbox keeps receiving notifications.':'Desktop alerts resumed.');if(!duration)await poll();}catch(error){if($('#form-error'))$('#form-error').textContent=friendly(error);else report(friendly(error),true);}};
   });
 }
-login();
+// A session change clears every view before booting the newly authenticated user.
+let displayedIdentity;
+pb.authStore.onChange(() => {
+  const next=sessionIdentity();
+  if(next===displayedIdentity)return;
+  displayedIdentity=next;
+  login();
+  if (pb.authStore.isValid && pb.authStore.record?.collectionName === 'users')
+    void start().catch(error => report(friendly(error),true));
+}, true);

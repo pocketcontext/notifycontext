@@ -37,7 +37,7 @@ Start from this application directory so hooks, migrations, configuration and ge
 /path/to/pinned/pocketcontext serve --dir /absolute/private/notifycontext-data --http 127.0.0.1:8090
 ```
 
-Open `http://127.0.0.1:8090`. No real users or domain records are seeded. An operator provisions verified ordinary `users` through maintenance REST/dashboard, or configures Google Workspace JIT. The password form is available for provisioned accounts during local evaluation. Browser tokens are held in memory; reloading requires sign-in. HTTPS is required outside loopback for desktop alerts.
+Open `http://127.0.0.1:8090`. No real users or domain records are seeded. An operator provisions verified ordinary `users` through maintenance REST/dashboard, or configures Google Workspace JIT. The password form is available for provisioned accounts during local evaluation. The official PocketBase SDK LocalAuthStore stores browser tokens under `notifycontext.auth` in local storage. Login persists across tabs and browser restarts; logout and account changes clear private views across tabs. Tokens are accessible to same-origin JavaScript. Active browser sessions renew at most every five minutes; late responses cannot restore a signed-out session. HTTPS is required outside loopback for desktop alerts.
 
 ## Identity
 

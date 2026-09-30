@@ -3,7 +3,7 @@ const user='user00000000001',sender='user00000000002';
 const jwt=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:user,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
 const now=new Date().toISOString();
 const initial={id:'note00000000001',sender,subject:'Supplier renewal ready',body_markdown:'## Review requested\n\nPlease review the [handoff](https://example.com).\n\n| Item | Status |\n| --- | --- |\n| Quote | Ready |\n\n```js\nconst approved = false;\n```\n\n<img src=x onerror="window.attacked=true">\n\n[bad](javascript:window.attacked=true)',kind:'review_requested',ack_required:true,due_at:'',withdrawn_at:'',withdrawal_reason:'',revision:1,created:now};
-async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false}={}) {
+async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false}={}) {
   let releaseRead;const readGate=new Promise(resolve=>{releaseRead=resolve;});
   const writes=[],notices=[];let preference=null;let notes=Array.from({length:count},(_,i)=>({...initial,id:'note'+String(i+1).padStart(11,'0'),subject:i?'Notification '+(i+1):initial.subject}));
   let recipients=notes.map((n,i)=>({id:'recp'+String(i+1).padStart(11,'0'),notification:n.id,recipient:user,read_at:'',acknowledged_at:'',archived_at:'',acknowledgement_markdown:'',revision:1,created:now}));
@@ -18,7 +18,8 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
   await page.route('**/api/**',async route=>{
     const request=route.request(),url=new URL(request.url()),body=request.postDataJSON();
     let data;
-    if(url.pathname.endsWith('/auth-with-password'))data={token:jwt,record:{id:user,name:'Vamsi',email:'vamsi@example.test'}};
+    if(url.pathname.endsWith('/auth-with-password'))data={token:jwt,record:{id:user,name:'Vamsi',collectionName:'users',email:'vamsi@example.test'}};
+    else if(url.pathname.endsWith('/auth-refresh')){const token=request.headers().authorization;const id=JSON.parse(Buffer.from(token.split('.')[1],'base64url')).id;data={token,record:{id,name:id===user?'Vamsi':'Other colleague',collectionName:'users'}};}
     else if(url.pathname==='/api/context/query') {
       const sql=body.sql;
       if(sql.includes('FROM user_directory'))data=result([{id:user,name:'Vamsi'},{id:sender,name:'Jack'}]);
@@ -44,7 +45,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
     if(holdRead && body?.action==='read')await readGate;
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
-  await page.goto('/');await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();await expect(page.getByRole('heading',{name:'Inbox',exact:true})).toBeVisible();await expect(page.locator('#connection')).toContainText('Connected');
+  await page.goto('/');if(!restore){await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();}await expect(page.getByRole('heading',{name:'Inbox',exact:true})).toBeVisible();await expect(page.locator('#connection')).toContainText('Connected');
   return {writes,releaseRead,addNotification(){notes.unshift({...initial,id:'new000000000001',created:new Date().toISOString(),subject:'New update'});recipients.unshift({id:'newrec000000001',notification:'new000000000001',recipient:user,revision:1,read_at:'',acknowledged_at:'',archived_at:''});}};
 }
 test('safe Markdown detail and explicit recipient actions',async({page})=>{
@@ -116,7 +117,7 @@ test('withdrawal takes precedence over pending and expired recipient statuses',a
 test('permalinks restore outside-page records through login and browser history without acknowledgements',async({page})=>{
   const {writes}=await setup(page,{count:65});
   await page.goto('/#/notifications/note00000000065?view=archived&q=missing');await page.reload();
-  await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Continue with Google'})).toHaveCount(0);
   await expect(page.locator('.detail-title')).toHaveText('Notification 65');
   await expect(page.locator('#search')).toHaveValue('missing');
   await expect(page.locator('#view-title')).toHaveText('Archived');
@@ -126,4 +127,66 @@ test('permalinks restore outside-page records through login and browser history 
   await page.goBack();await expect(page.locator('.detail-title')).toHaveText('Notification 65');
   await expect(page.getByRole('button',{name:'Copy record link',exact:true})).toBeVisible();
   expect(writes).toHaveLength(0);
+});
+
+
+test('persistent login and cross-tab logout discard late private responses',async({page,context})=>{
+  await setup(page);
+  const peer=await context.newPage();await setup(peer,{restore:true});
+  await peer.reload();await expect(peer.locator('#connection')).toContainText('Connected');
+  let release;const gate=new Promise(resolve=>{release=resolve;});
+  let requested;const started=new Promise(resolve=>{requested=resolve;});
+  await page.route('**/api/context/query',async route=>{
+    if(route.request().postDataJSON().sql.startsWith('SELECT * FROM notifications')){
+      requested();await gate;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:Object.keys(initial),rows:[Object.values(initial)],truncated:false})});
+    }else await route.fallback();
+  });
+  await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await started;
+  await peer.getByRole('button',{name:'Sign out',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();
+  release();await page.reload();
+  await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();
+  await expect(page.locator('article')).toHaveCount(0);
+  await page.unroute('**/api/context/query');
+  await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(peer.getByRole('heading',{name:'Inbox',exact:true})).toBeVisible();
+});
+
+test('cross-tab account replacement removes private detail and drafts',async({page,context})=>{
+  await setup(page);const peer=await context.newPage();await setup(peer,{restore:true});
+  await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
+  await expect(page.locator('article')).toBeVisible();
+  await page.getByRole('button',{name:'New notification'}).click();
+  await page.getByLabel('Subject',{exact:true}).fill('Private draft');
+  await page.route('**/api/context/query',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:[],rows:[],truncated:false})}));
+  const token=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:sender,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
+  await peer.evaluate(({token,id})=>localStorage.setItem('notifycontext.auth',JSON.stringify({token,record:{id,name:'Other colleague',collectionName:'users'}})),{token,id:sender});
+  await expect(page.locator('#settings')).toContainText('Other colleague');
+  await expect(page.locator('article')).toHaveCount(0);await expect(page.getByLabel('Subject',{exact:true})).toHaveCount(0);
+  await expect(page.getByText('Supplier renewal ready',{exact:true})).toHaveCount(0);
+});
+
+
+test('same-account token renewal preserves an open draft',async({page,context})=>{
+  await setup(page);const peer=await context.newPage();await setup(peer,{restore:true});
+  await page.getByRole('button',{name:'New notification'}).click();await page.getByLabel('Subject',{exact:true}).fill('Keep this draft');
+  const token=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:user,exp:Math.floor(Date.now()/1000)+7200})).toString('base64url')+'.renewed';
+  await peer.evaluate(token=>{const session=JSON.parse(localStorage.getItem('notifycontext.auth'));session.token=token;localStorage.setItem('notifycontext.auth',JSON.stringify(session));},token);
+  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('notifycontext.auth')).token)).toBe(token);
+  await expect(page.getByLabel('Subject',{exact:true})).toHaveValue('Keep this draft');
+});
+
+test('a delayed refresh cannot restore a session after cross-tab logout',async({page,context})=>{
+  await setup(page);const peer=await context.newPage();await setup(peer,{restore:true});
+  let release;const gate=new Promise(resolve=>{release=resolve;});
+  let requested;const started=new Promise(resolve=>{requested=resolve;});
+  await page.route('**/api/collections/users/auth-refresh',async route=>{
+    requested();await gate;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({token:jwt,record:{id:user,name:'Vamsi',collectionName:'users'}})});
+  });
+  await page.reload();await started;
+  await peer.getByRole('button',{name:'Sign out',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();
+  const response=page.waitForResponse('**/api/collections/users/auth-refresh');release();await response;
+  await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();
+  expect(await page.evaluate(()=>localStorage.getItem('notifycontext.auth'))).toBeNull();
 });

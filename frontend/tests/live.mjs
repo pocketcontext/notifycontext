@@ -2,7 +2,8 @@ import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true});
 try {
- const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+ const context=await browser.newContext({viewport:{width:1440,height:1000}});
+ const page=await context.newPage(),errors=[];
  page.on('pageerror',error=>errors.push(error.message));
  await page.goto(process.env.NOTIFYCONTEXT_TEST_URL);
  await page.getByText('Local test sign-in').click();
@@ -10,6 +11,18 @@ try {
  await page.getByLabel('Password',{exact:true}).fill('SyntheticUserPassword123!');
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
  await page.locator('#connection').filter({hasText:'Connected'}).waitFor();
+ const peer=await page.context().newPage();
+ await peer.goto(process.env.NOTIFYCONTEXT_TEST_URL);
+ await peer.locator('#connection').filter({hasText:'Connected'}).waitFor();
+ await peer.reload();await peer.locator('#connection').filter({hasText:'Connected'}).waitFor();
+ await peer.getByRole('button',{name:'Sign out',exact:true}).click();
+ await page.getByRole('button',{name:'Continue with Google'}).waitFor();
+ await page.reload();await page.getByRole('button',{name:'Continue with Google'}).waitFor();
+ await page.getByText('Local test sign-in').click();
+ await page.getByLabel('Email',{exact:true}).fill('bob@example.com');
+ await page.getByLabel('Password',{exact:true}).fill('SyntheticUserPassword123!');
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ await peer.locator('#connection').filter({hasText:'Connected'}).waitFor();await peer.close();
  await page.getByRole('heading',{name:'Supplier renewal ready',exact:true}).click();
  await page.locator('article strong').filter({hasText:'terms'}).waitFor();
  await page.getByRole('button',{name:'Mark read',exact:true}).click();
