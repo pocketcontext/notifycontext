@@ -6,3 +6,5 @@
 @media(prefers-reduced-motion:no-preference){button,a{transition:background-color .12s ease}}
 
 .recipient-status .recipient-email,.recipient-status .claim-deadline{width:100%;margin-top:5px;overflow-wrap:anywhere}.recipient-status>div>strong{overflow-wrap:anywhere;max-width:100%}
+
+.sidebar .toolbar{display:flex;flex-direction:column;align-items:stretch;padding:16px 0;gap:10px}.sidebar .toolbar input,.sidebar .toolbar select{width:100%;min-width:0}.sidebar .toolbar .search{min-width:0}

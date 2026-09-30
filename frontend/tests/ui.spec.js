@@ -112,3 +112,18 @@ test('Sent keeps pending recipients without directory accounts and distinguishes
 test('withdrawal takes precedence over pending and expired recipient statuses',async({page})=>{
  await setup(page,{pending:true,withdrawn:true});await page.getByRole('button',{name:'Sent',exact:false}).click();await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page.locator('.recipient-status').getByText('Withdrawn',{exact:true})).toHaveCount(3);await expect(page.getByText('Awaiting first sign-in',{exact:true})).toHaveCount(0);await expect(page.getByText('Expired',{exact:true})).toHaveCount(0);
 });
+
+test('permalinks restore outside-page records through login and browser history without acknowledgements',async({page})=>{
+  const {writes}=await setup(page,{count:65});
+  await page.goto('/#/notifications/note00000000065?view=archived&q=missing');await page.reload();
+  await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.locator('.detail-title')).toHaveText('Notification 65');
+  await expect(page.locator('#search')).toHaveValue('missing');
+  await expect(page.locator('#view-title')).toHaveText('Archived');
+  await expect(page.locator('.notification-row')).toHaveCount(0);
+  await page.getByRole('button',{name:'Sent',exact:false}).first().click();
+  await expect(page.locator('#view-title')).toHaveText('Sent');
+  await page.goBack();await expect(page.locator('.detail-title')).toHaveText('Notification 65');
+  await expect(page.getByRole('button',{name:'Copy record link',exact:true})).toBeVisible();
+  expect(writes).toHaveLength(0);
+});

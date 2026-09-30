@@ -55,3 +55,13 @@ The copied portable skill passed live schema comparison and full-backlog tests w
 Independent review checked that verified Google claim writes commit before the token response, email addresses remain protected by sender/linked-recipient SQL filters, and old publication keys retain their canonical payload. Claiming a very large pending backlog uses one transaction and may increase Google sign-in latency; no background claimant is introduced.
 
 The new pending-recipient suite passed migration/legacy-key compatibility, multiple pending destinations, expiry and withdrawal nonclaim, trusted Google claims, no password claim, new-account and multi-notification rollback, concurrent signup/publication, permanent claimed identity across email reassignment, and unchanged read/acknowledgement state after claim. The existing Google OAuth integration suite passed after the transaction changes. CI now runs the new suite before image publication.
+
+## Record navigation — 30 September 2026
+
+All README Python validation commands passed against the unchanged a92b0de server
+pin with isolated synthetic databases. Twelve Chromium tests passed, including
+permalinks outside the current list, reload/sign-in, archived/search URL state,
+browser back navigation and absence of implicit acknowledgements. The production
+frontend build passed. The browser test server now uses a configurable dedicated
+port (`NOTIFYCONTEXT_TEST_PORT`) and refuses to reuse an unrelated running server.
+Container config/smoke/populated-restore remain release CI gates.
