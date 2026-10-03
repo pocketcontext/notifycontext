@@ -1,5 +1,42 @@
 # NotifyContext release and deployment
 
+## Realtime unread favicon — 3 October 2026
+
+Deployed source `76795736c30aa8cfc7d2be6afa50cd25e830810c` at
+https://notify.pocketcontext.com. The PocketContext server pin remains
+`a92b0de5e1b66b6d3b6135b90092d2d6da5f7cc8`.
+
+- Multi-platform image: `ghcr.io/pocketcontext/notifycontext@sha256:c39ca860beb56d745510ccb86f9bbc9da216de6714f94966de6a5bb7b17178b5`.
+- ARM64 manifest: `sha256:c5eb70e4ce0aabf9dfaa93f45a5451aa2f612a7d5b37ba6ce43e5300717a2255`.
+- AMD64 manifest: `sha256:fcc76d4f9c47b9ac0da0e8d748f9da0ee05a9abd998edb52daa06f95cf583bdd`.
+- [Application CI](https://github.com/pocketcontext/notifycontext/actions/runs/37132612514) and [release CI](https://github.com/pocketcontext/notifycontext/actions/runs/37132612678) passed, including container configuration, smoke and populated replica restoration.
+
+The N favicon now overlays unread counts 1–99 and 99+, while the title/sidebar
+retain the exact count. Counts exclude archived and withdrawn notifications.
+Authenticated per-user signals after committed notification events trigger SQL
+refreshes, with a 60-second fallback and reconnect/visibility recovery. Ordinary
+record subscriptions remain locked; signals contain no notification data.
+
+All twelve Python suites, 22 browser tests, the Node.js 22 build and the actual
+server browser workflow passed locally. The latter verifies another open tab
+updates through SSE within five seconds. Actual pinned Chromium icons were
+inspected at standard/2x display scales and with a dark browser theme.
+
+The pre-update backup `before-realtime-favicon-20261003151413.zip` passed ZIP
+integrity and database-entry checks. The installed locked graceful-stop wrapper
+matched the versioned source and was invoked through the existing operator SSH
+access; the dedicated local deployment key was unavailable on this host. One
+writer, one CPU, 512 MiB, persistent storage and disabled automatic updates were
+verified afterward. All fourteen other managed containers retained their IDs,
+images, states and settings. No new infrastructure or business records were created.
+
+Production HTTPS health, exact public JavaScript/CSS bytes, restrictive security
+headers, rejected anonymous SQL/schema/private-SSE subscriptions, desktop/mobile
+rendering, keyboard focus and absence of overflow/script errors passed. Full
+interactive Google sign-in and native OS alert delivery remain user-device checks.
+Existing tabs need one reload to load this browser release. Suspended or closed
+tabs cannot promise immediate updates.
+
 ## Pending email delivery release — 28 September 2026
 
 Deployed at https://notify.pocketcontext.com from source `2be8d49338bcbdf12325c39212b5fb60b3125799`. The PocketContext pin remains `a92b0de5e1b66b6d3b6135b90092d2d6da5f7cc8`.
