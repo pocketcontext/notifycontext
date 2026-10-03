@@ -14,10 +14,19 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
       {...recipients[0],id:'expired00000001',recipient:'',recipient_name:null,addressed_email:'expired.colleague@example.test',claimed_at:'',claim_expires_at:'2020-01-01 00:00:00.000Z'}];
   }
   const result=records=>({columns:Object.keys(records[0]||{}),rows:records.map(Object.values),truncated:false});
+  await page.addInitScript(()=>{
+    window.realtimeConnections=[];
+    window.EventSource=class extends EventTarget {
+      constructor(){super();this.readyState=1;window.realtimeConnections.push(this);setTimeout(()=>this.dispatchEvent(new MessageEvent('PB_CONNECT',{data:'{}',lastEventId:'test-client'})),0);}
+      close(){this.readyState=2;}
+    };
+    window.inboxSignal=()=>window.realtimeConnections.at(-1).dispatchEvent(new MessageEvent('notifycontext.inbox.user00000000001',{data:'{}'}));
+  });
   await page.addInitScript(({permission})=>{window.notificationCalls=[];window.Notification=class {static permission=permission;static async requestPermission(){this.permission='granted';return 'granted';}constructor(title,options){window.notificationCalls.push({title,...options});}close(){}};},{permission});
   await page.route('**/api/**',async route=>{
     const request=route.request(),url=new URL(request.url()),body=request.postDataJSON();
     let data;
+    if(url.pathname==='/api/realtime'){await route.fulfill({status:200,contentType:'application/json',body:'{}'});return;}
     if(url.pathname.endsWith('/auth-with-password'))data={token:jwt,record:{id:user,name:'Vamsi',collectionName:'users',email:'vamsi@example.test'}};
     else if(url.pathname.endsWith('/auth-refresh')){const token=request.headers().authorization;const id=JSON.parse(Buffer.from(token.split('.')[1],'base64url')).id;data={token,record:{id,name:id===user?'Vamsi':'Other colleague',collectionName:'users'}};}
     else if(url.pathname==='/api/context/query') {
@@ -25,7 +34,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
       if(sql.includes('FROM user_directory'))data=result([{id:user,name:'Vamsi'},{id:sender,name:'Jack'}]);
       else if(sql.includes('FROM user_status'))data=result([]);
       else if(sql.includes('FROM notification_preferences'))data=result(preference?[preference]:[]);
-      else if(sql.includes('count(*)'))data=result([{total:recipients.filter(r=>!r.read_at).length}]);
+      else if(sql.includes('count(*)')){expect(sql).toContain("n.withdrawn_at");data=result([{total:recipients.filter(r=>r.recipient===user && !r.read_at && !r.archived_at && !notes.find(n=>n.id===r.notification)?.withdrawn_at).length}]);}
       else if(sql.startsWith('SELECT n.id, n.created'))data=result(notes.map(n=>({id:n.id,created:n.created})));
       else if(sql.includes('FROM notification_references'))data=result([{id:'ref000000000001',notification:notes[0].id,label:'Supporting document',url:'https://example.com',kind:'url'}]);
       else if(sql.includes('FROM notification_recipients'))data=result(recipients.filter(r=>sql.includes(r.notification)));
@@ -39,7 +48,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
     } else {
       writes.push({path:url.pathname,body});
       const recipient=recipients.find(r=>url.pathname.endsWith('/'+r.id));
-      if(recipient){if(body.action==='read')recipient.read_at=now;if(body.action==='acknowledge'){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}data=recipient;}
+      if(recipient){if(body.action==='archive')recipient.archived_at=now;if(body.action==='unarchive')recipient.archived_at='';if(body.action==='read')recipient.read_at=now;if(body.action==='acknowledge'){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}data=recipient;}
       else if(url.pathname.includes('notification_preferences')){preference={id:'prefs0000000001',revision:1,...body};data=preference;}else data={...initial,id:'created00000001',...body};
     }
     if(holdRead && body?.action==='read')await readGate;
@@ -167,13 +176,16 @@ test('cross-tab account replacement removes private detail and drafts',async({pa
 });
 
 
-test('same-account token renewal preserves an open draft',async({page,context})=>{
+test('same-account token renewal preserves an open draft and rebinds realtime',async({page,context})=>{
   await setup(page);const peer=await context.newPage();await setup(peer,{restore:true});
+  await expect.poll(()=>page.evaluate(()=>window.realtimeConnections.length)).toBeGreaterThan(0);
+  const connections=await page.evaluate(()=>window.realtimeConnections.length);
   await page.getByRole('button',{name:'New notification'}).click();await page.getByLabel('Subject',{exact:true}).fill('Keep this draft');
   const token=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:user,exp:Math.floor(Date.now()/1000)+7200})).toString('base64url')+'.renewed';
   await peer.evaluate(token=>{const session=JSON.parse(localStorage.getItem('notifycontext.auth'));session.token=token;localStorage.setItem('notifycontext.auth',JSON.stringify(session));},token);
   await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('notifycontext.auth')).token)).toBe(token);
   await expect(page.getByLabel('Subject',{exact:true})).toHaveValue('Keep this draft');
+  await expect.poll(()=>page.evaluate(()=>window.realtimeConnections.length)).toBeGreaterThan(connections);
 });
 
 test('a delayed refresh cannot restore a session after cross-tab logout',async({page,context})=>{
@@ -189,4 +201,57 @@ test('a delayed refresh cannot restore a session after cross-tab logout',async({
   const response=page.waitForResponse('**/api/collections/users/auth-refresh');release();await response;
   await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();
   expect(await page.evaluate(()=>localStorage.getItem('notifycontext.auth'))).toBeNull();
+});
+
+
+test('tab count preserves explicit actions, ignores filters, and resets on logout',async({page})=>{
+  await setup(page,{count:101});await expect(page).toHaveTitle('(101) NotifyContext');
+  const favicon=page.locator('link[rel="icon"]');await expect(favicon).toHaveAttribute('href',/99%2B/);
+  await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page).toHaveTitle('(101) NotifyContext');
+  await page.getByRole('button',{name:'Acknowledge',exact:true}).click();await expect(page).toHaveTitle('(101) NotifyContext');
+  await page.getByRole('button',{name:'Mark read',exact:true}).click();await expect(page).toHaveTitle('(100) NotifyContext');
+  await page.getByRole('searchbox').fill('missing');await expect(page.getByRole('heading',{name:'No matching notifications'})).toBeVisible();await expect(page).toHaveTitle('(100) NotifyContext');
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page).toHaveTitle('NotifyContext');await expect(favicon).not.toHaveAttribute('href',/%3Ctext/);
+});
+test('archived notifications do not count and failures retain the indicator',async({page})=>{
+  await setup(page);await expect(page).toHaveTitle('(1) NotifyContext');
+  await page.route('**/api/context/query',route=>route.fulfill({status:503,contentType:'application/json',body:'{"message":"Offline"}'}));
+  await page.getByRole('button',{name:'Refresh notifications'}).click();await expect(page.locator('#connection')).toContainText('interrupted');await expect(page).toHaveTitle('(1) NotifyContext');
+  await page.unroute('**/api/context/query');
+  await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await page.getByRole('button',{name:'Archive',exact:true}).click();await expect(page).toHaveTitle('NotifyContext');
+});
+
+test('realtime refreshes a background inbox, coalesces events and keeps alert pause independent',async({page})=>{
+ const mock=await setup(page,{permission:'granted'});
+ await page.locator('#settings').click();await page.getByLabel('Pause duration',{exact:true}).selectOption('30');await page.getByRole('button',{name:'Save alert preference'}).click();
+ await page.evaluate(()=>Object.defineProperty(document,'hidden',{configurable:true,value:true}));
+ mock.addNotification();await page.evaluate(()=>{for(let i=0;i<5;i++)window.inboxSignal();});
+ await expect(page).toHaveTitle('(2) NotifyContext');await expect(page.locator('#unread-count')).toHaveText('2');expect(await page.evaluate(()=>window.notificationCalls.length)).toBe(0);
+});
+test('withdrawn notifications do not contribute to the tab count',async({page})=>{
+ await setup(page,{pending:true,withdrawn:true});await expect(page).toHaveTitle('NotifyContext');await expect(page.locator('#unread-count')).toHaveText('0');
+});
+
+test('reconnect and fallback polling recover changes without an inbox signal',async({page})=>{
+ await page.clock.install();const mock=await setup(page);
+ mock.addNotification();
+ await page.evaluate(()=>window.realtimeConnections.at(-1).dispatchEvent(new MessageEvent('PB_CONNECT',{data:'{}',lastEventId:'reconnected-client'})));
+ await expect(page).toHaveTitle('(2) NotifyContext');
+ await page.route('**/api/context/query',async route=>{if(route.request().postDataJSON().sql.includes('count(*)'))await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:['total'],rows:[[3]],truncated:false})});else await route.fallback();});
+ await page.clock.fastForward(60000);await expect(page).toHaveTitle('(3) NotifyContext');
+});
+test('an inbox event during an in-flight poll schedules a follow-up and logout rejects stale count',async({page})=>{
+ const mock=await setup(page);let release,started;
+ const gate=new Promise(resolve=>{release=resolve;}),requested=new Promise(resolve=>{started=resolve;});let held=false;
+ await page.route('**/api/context/query',async route=>{
+  if(!held && route.request().postDataJSON().sql.includes('count(*)')){held=true;started();await gate;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:['total'],rows:[[1]],truncated:false})});}else await route.fallback();
+ });
+ await page.getByRole('button',{name:'Refresh notifications'}).click();await requested;
+ mock.addNotification();await page.evaluate(()=>window.inboxSignal());release();await expect(page).toHaveTitle('(2) NotifyContext');
+ let releaseAgain,startedAgain;const gateAgain=new Promise(resolve=>{releaseAgain=resolve;}),requestedAgain=new Promise(resolve=>{startedAgain=resolve;});
+ await page.route('**/api/context/query',async route=>{
+  if(route.request().postDataJSON().sql.includes('count(*)')){startedAgain();await gateAgain;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:['total'],rows:[[99]],truncated:false})});}else await route.fallback();
+ });
+ await page.getByRole('button',{name:'Refresh notifications'}).click();await requestedAgain;
+ await page.getByRole('button',{name:'Sign out',exact:true}).click();releaseAgain();await expect(page).toHaveTitle('NotifyContext');await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();
 });

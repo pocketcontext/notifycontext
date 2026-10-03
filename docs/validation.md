@@ -76,3 +76,26 @@ private views/drafts, delayed responses and refresh after logout, and same-accou
 token renewal preserving an open draft. No implicit acknowledgement was added.
 The official PocketBase JS SDK is pinned to 0.28.1 in the frontend lockfile.
 Container smoke and populated recovery remain release CI gates.
+
+## Realtime unread favicon — 3 October 2026
+
+All twelve README Python suites passed against the unchanged clean `a92b0de`
+server pin, using synthetic isolated databases. New actual-SSE coverage checks
+sender/recipient routing, empty payloads, cross-user/operator/anonymous rejection,
+locked record subscriptions, committed SQL visibility, duplicate retries,
+publication and OAuth claim rollback, reconnect, revocation and token expiry.
+
+The Node.js 22 production build and all 22 Playwright tests passed. Browser
+coverage includes exact counts, zero/99+ badge states, filters, alert pauses,
+withdrawal, offline retention, reconnect, 60-second fallback, changes during an
+in-flight refresh, logout races and same-account token renewal without draft loss.
+
+The production browser workflow verifies that marking a notification read in one
+tab updates a second tab's title and sidebar through realtime within five seconds.
+No read or acknowledgement is caused by fetching or opening a record.
+
+Headed Chromium pinned-tab checks inspected the actual browser chrome at standard
+and 2x display scales, including a dark browser theme. Counts 1, 9, 10, 24, 99 and
+99+ remain visible with the N mark; zero uses the plain mark. The exact count stays
+in the title/sidebar. This is a Linux Chromium check, not a guarantee for every
+browser, device, suspension policy or native desktop notification configuration.

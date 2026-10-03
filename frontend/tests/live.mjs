@@ -1,4 +1,4 @@
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true});
 try {
@@ -22,11 +22,14 @@ try {
  await page.getByLabel('Email',{exact:true}).fill('bob@example.com');
  await page.getByLabel('Password',{exact:true}).fill('SyntheticUserPassword123!');
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
- await peer.locator('#connection').filter({hasText:'Connected'}).waitFor();await peer.close();
+ await peer.locator('#connection').filter({hasText:'Connected'}).waitFor();
+ await expect(peer).toHaveTitle('(1) NotifyContext');
  await page.getByRole('heading',{name:'Supplier renewal ready',exact:true}).click();
  await page.locator('article strong').filter({hasText:'terms'}).waitFor();
  await page.getByRole('button',{name:'Mark read',exact:true}).click();
  await page.getByRole('button',{name:'Mark read',exact:true}).waitFor({state:'detached'});
+ // A separate open tab must receive the committed change before fallback polling.
+ await expect(peer).toHaveTitle('NotifyContext',{timeout:5000});await peer.close();
  await page.getByLabel('Optional acknowledgement note').fill('Received; reviewing this afternoon.');
  await page.getByRole('button',{name:'Acknowledge',exact:true}).click();
  await page.locator('.acknowledgement').filter({hasText:'Received; reviewing this afternoon.'}).waitFor();

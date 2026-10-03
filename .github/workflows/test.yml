@@ -53,6 +53,8 @@ jobs:
         run: python3 notifycontext/tests/oauth.py
       - name: Test privacy and batch rejection
         run: python3 notifycontext/tests/security.py --binary pocketcontext/bin/pocketcontext
+      - name: Test private inbox realtime and transaction rollback
+        run: python3 notifycontext/tests/realtime.py --binary pocketcontext/bin/pocketcontext
       - name: Test populated backup recovery
         run: python3 notifycontext/tests/backup.py --binary pocketcontext/bin/pocketcontext
       - name: Test client backlog behavior

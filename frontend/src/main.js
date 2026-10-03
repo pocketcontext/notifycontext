@@ -1,5 +1,6 @@
 import {pb, signIn, refreshSession, sessionIdentity} from './auth.js';
 import {escapeHTML as e, sqlQuote as q, markdown, rows, statusLabel, kindLabel, effectiveStatus, alertDecision} from './core.js';
+import {updateTabIndicator} from './tab-indicator.js';
 import './style.css';
 
 const state = {view:'inbox', filter:'all', search:'', page:0, list:[], directory:[], statuses:[], preferences:null, latest:null, lastPoll:0, connected:false, selected:null};
@@ -25,7 +26,28 @@ let sessionEpoch=0;
 const parseDate=value=>new Date(String(value).replace(' ','T'));
 window.addEventListener('online',()=>{if(pb.authStore.isValid)void poll();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden && pb.authStore.isValid)void poll();});
-let timer, searchTimer, pollBusy=false, listGeneration=0;
+let timer, searchTimer, realtimeTimer, pollBusy=false, pollAgain=false, listGeneration=0, realtimeGeneration=0, realtimeStarted=false, realtimeToken='';
+function scheduleRefresh(epoch=sessionEpoch) {
+  if(epoch!==sessionEpoch || !pb.authStore.isValid)return;
+  if(pollBusy){pollAgain=true;return;}
+  clearTimeout(realtimeTimer);
+  realtimeTimer=setTimeout(()=>{if(epoch===sessionEpoch)void poll();},100);
+}
+async function subscribeInbox(epoch) {
+  const generation=++realtimeGeneration;
+  realtimeStarted=true;realtimeToken=pb.authStore.token;
+  const refresh=()=>{if(generation===realtimeGeneration)scheduleRefresh(epoch);};
+  try {
+    // Rebind the authenticated stream when this account renews its bearer token.
+    await pb.realtime.unsubscribe();
+    if(epoch!==sessionEpoch || generation!==realtimeGeneration)return;
+    await Promise.all([
+      pb.realtime.subscribe('PB_CONNECT',refresh),
+      pb.realtime.subscribe(`notifycontext.inbox.${pb.authStore.record.id}`,refresh),
+    ]);
+    refresh();
+  } catch { /* The periodic refresh remains available if realtime cannot connect. */ }
+}
 const $ = sel=>document.querySelector(sel);
 const all = sel=>[...document.querySelectorAll(sel)];
 const date = value=>value ? parseDate(value).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
@@ -59,7 +81,7 @@ async function pageAll(table, where='', order='id') {
   for(let offset=0;;offset+=200){const batch=await query(`SELECT * FROM ${table} ${where} ORDER BY ${order} LIMIT 200 OFFSET ${offset}`);result.push(...batch);if(batch.length<200) return result;}
 }
 function login() {
-  clearInterval(timer);clearTimeout(searchTimer);sessionEpoch++;listGeneration++;pollBusy=false;Object.assign(state,{view:'inbox',filter:'all',search:'',page:0,list:[],directory:[],statuses:[],preferences:null,latest:null,lastPoll:0,connected:false,selected:null,pendingAlerts:new Map()});
+  clearInterval(timer);clearTimeout(searchTimer);clearTimeout(realtimeTimer);sessionEpoch++;listGeneration++;pollBusy=false;pollAgain=false;realtimeStarted=false;realtimeGeneration++;updateTabIndicator(0);Object.assign(state,{view:'inbox',filter:'all',search:'',page:0,list:[],directory:[],statuses:[],preferences:null,latest:null,lastPoll:0,connected:false,selected:null,pendingAlerts:new Map()});
   $('#app').innerHTML=`<main class="login"><div class="brand"><span class="brand-mark">N</span> NotifyContext</div><section class="login-card"><p class="eyebrow">KEEP WORK MOVING</p><h1>A clear place for<br>your next handoff.</h1><p class="muted">Updates, requests and acknowledgements.<br>For every kind of work.</p><button class="primary wide" id="google">Continue with Google</button><p class="fine">Use your organization's Google Workspace account.</p><details><summary>Local test sign-in</summary><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="secondary wide">Sign in</button></form></details><div id="notice" class="notice" role="status" hidden></div></section><p class="login-foot">Your attention, thoughtfully organized.</p></main>`;
   $('#google').onclick=async()=>{try {await signIn(null,null,true);}catch(error){report(friendly(error),true);}};
   $('#login-form').onsubmit=async event=>{event.preventDefault(); const data=new FormData(event.target);try {await signIn(data.get('email'),data.get('password'));}catch(error){report(friendly(error),true);}};
@@ -83,7 +105,8 @@ async function start() {
   updateAlerts();
   try { await refreshSession(); if(epoch!==sessionEpoch)return; await directory(); if(epoch!==sessionEpoch)return; await poll(true); if(epoch!==sessionEpoch)return; if(state.selected)await openDetail(state.selected); } catch(error){report(friendly(error),true);}
   if(epoch!==sessionEpoch)return;
-  timer=setInterval(()=>poll(),15000);
+  void subscribeInbox(epoch);
+  timer=setInterval(()=>poll(),60000);
 
 }
 async function directory() {
@@ -114,14 +137,14 @@ async function loadList() {
   all('.notification-row').forEach(button=>button.onclick=()=>openDetail(button.dataset.id));
 }
 async function poll(manual=false) {
-  if(pollBusy)return;
+  if(pollBusy){pollAgain=true;return;}
   if(!pb.authStore.isValid){if(pb.authStore.record){pb.authStore.clear();report('Your session expired. Sign in again to continue.',true);}return;}
   pollBusy=true;const epoch=sessionEpoch;
   try {
     await refreshSession();
     if(epoch!==sessionEpoch)return;
     const latest=(await query(`SELECT n.id, n.created FROM notifications n JOIN notification_recipients r ON r.notification=n.id WHERE r.recipient=${q(pb.authStore.record.id)} AND (n.withdrawn_at='' OR n.withdrawn_at IS NULL) ORDER BY n.created DESC, n.id DESC LIMIT 100`));
-    const unread=await query(`SELECT count(*) AS total FROM notification_recipients WHERE recipient=${q(pb.authStore.record.id)} AND (read_at='' OR read_at IS NULL) AND (archived_at='' OR archived_at IS NULL)`);
+    const unread=await query(`SELECT count(*) AS total FROM notification_recipients r JOIN notifications n ON n.id=r.notification WHERE r.recipient=${q(pb.authStore.record.id)} AND (r.read_at='' OR r.read_at IS NULL) AND (r.archived_at='' OR r.archived_at IS NULL) AND (n.withdrawn_at='' OR n.withdrawn_at IS NULL)`);
     if(epoch!==sessionEpoch)return;
     await directory();
     if(epoch!==sessionEpoch)return;
@@ -134,13 +157,14 @@ async function poll(manual=false) {
     if(epoch!==sessionEpoch)return;
     if(!paused)state.pendingAlerts.clear();
     state.latest=new Set(latest.map(item=>item.id));state.lastPoll=Date.now();state.connected=true;
-    $('#unread-count').textContent=unread[0]?.total || 0;
-    $('#connection').textContent='● Connected · updates every 15 seconds';$('#connection').classList.remove('offline');
+    const count=unread[0]?.total || 0;
+    $('#unread-count').textContent=count;updateTabIndicator(count);
+    $('#connection').textContent='● Connected · automatic updates';$('#connection').classList.remove('offline');
     updateAlerts();
     await loadList();
     if(manual) report('Inbox is up to date. Fetching does not mark notifications read.');
   } catch(error) {if(epoch!==sessionEpoch){if(!pb.authStore.isValid)report(friendly(error),true);return;}state.connected=false;$('#connection').textContent='○ Connection interrupted · retrying';$('#connection').classList.add('offline');if(manual)report(friendly(error),true);}
-  finally {if(epoch===sessionEpoch)pollBusy=false;}
+  finally {if(epoch===sessionEpoch){pollBusy=false;if(pollAgain){pollAgain=false;scheduleRefresh(epoch);}}}
 }
 async function desktopAlert(decision,id) {
   const epoch=sessionEpoch;
@@ -224,7 +248,7 @@ function settings() {
 let displayedIdentity;
 pb.authStore.onChange(() => {
   const next=sessionIdentity();
-  if(next===displayedIdentity)return;
+  if(next===displayedIdentity){if(next && realtimeStarted && realtimeToken!==pb.authStore.token)void subscribeInbox(sessionEpoch);return;}
   displayedIdentity=next;
   login();
   if (pb.authStore.isValid && pb.authStore.record?.collectionName === 'users')

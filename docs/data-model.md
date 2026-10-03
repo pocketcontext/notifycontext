@@ -11,7 +11,7 @@ Publish POST /api/collections/notifications/records with subject,body_markdown,k
 Withdraw PATCH notifications/ID {expected_revision, action:"withdraw", withdrawal_reason}. No editing content/deleting.
 Recipient PATCH notification_recipients/ID {expected_revision,action:"read"|"acknowledge"|"archive"|"unarchive",acknowledgement_markdown optional}. Server timestamps, owner only, idempotent action retries when already satisfied. Acknowledgement does not mean task complete. No other recipient mutations.
 Status/preferences POST owner record then PATCH with expected_revision; server owns user. Status expiry displayed at read time, not auto-rewritten.
-No push in v1. Browser polling reads do not mark read. Native alerts require open app and permission. Pauses affect alerts only. No calendar integration, presence, reminders, attachments or threads.
+No background Web Push in v1. Private realtime inbox-change signals prompt authenticated SQL reads after committed notification events, with 60-second fallback polling and reconnect/visibility refresh. Browser reads do not mark read. Native alerts require open app and permission. Pauses affect alerts only. No calendar integration, presence, reminders, attachments or threads.
 
 ## Email recipients and claims
 

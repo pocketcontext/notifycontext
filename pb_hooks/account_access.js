@@ -43,6 +43,10 @@ function realtime(e) {
   // Connection setup and OAuth callback delivery are deliberately anonymous.
   if (e.message.name === "PB_CONNECT" || e.message.name === "@oauth2") return e.next();
   const auth = e.client.get("auth");
+  // Check the destination again at delivery, including queued messages after
+  // logout/account replacement or revocation on this realtime connection.
+  if (e.message.name.startsWith('notifycontext.inbox.') &&
+      !require(`${__hooks}/inbox_realtime.js`).delivery(e)) return;
   // All application record subscriptions require authentication. Recheck at
   // delivery as a message may have been queued before the account was disabled.
   if (!auth) return;

@@ -14,6 +14,15 @@ Manual availability is available, busy, in a meeting, away or not set, with an o
 
 The browser supplies Inbox, Sent, Archived, Markdown details and preview, composition, status and alert settings. Its sidebar searches notification subjects, messages and exact IDs across the authorized backlog. Permanent `/#/notifications/<id>` links restore the selected notification after sign-in, including archived records outside the current result page. View, text search, filter and page are URL state; Copy record link omits browsing filters and Copy search link preserves them. Opening a record never marks it read or acknowledges it. Desktop alerts require permission and an open tab. Background Web Push, mobile closed-app alerts, automatic presence, calendar integration, reminders, threads and attachments are outside this version. Browser/OS settings may suppress desktop alerts; dismissing one does not acknowledge the notification.
 
+The browser favicon overlays the unread inbox count on the NotifyContext mark; the
+page title and sidebar show the exact count. Archived and withdrawn notifications
+do not count. Private, authenticated realtime signals trigger filtered SQL refreshes
+without exposing notification content. Refresh also runs after reconnect, on return
+to the tab and every 60 seconds as a fallback. Suspended or closed tabs cannot
+promise immediate updates. Desktop-alert pauses do not hide the unread count.
+Signing out or changing accounts clears the tab indicator; connection failures
+retain the last successful count. Opening a notification still does not mark it read.
+
 See [data model](docs/data-model.md), [security](docs/security.md), [validation evidence](docs/validation.md) and [deployment preparation](docs/deployment.md).
 
 ## Run locally
@@ -66,6 +75,7 @@ Use the pinned binary and synthetic isolated databases:
 ```sh
 python3 tests/integration.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/security.py --binary /absolute/path/to/pinned/pocketcontext
+python3 tests/realtime.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/auth.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/oauth_integration.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/pending_recipients.py --binary /absolute/path/to/pinned/pocketcontext
