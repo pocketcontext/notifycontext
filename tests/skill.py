@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--binary', required=True)
     parser.add_argument('--write-schema', action='store_true')
     parser.add_argument('--client', type=Path, help='Copy and execute a standalone launcher using uv')
+    parser.add_argument('--trace', action='store_true', help='Trace the complete synthetic workflow')
     args = parser.parse_args()
     with server(args.binary, env={'NOTIFYCONTEXT_GOOGLE_WORKSPACE_DOMAIN': 'example.com'}) as request, tempfile.TemporaryDirectory(prefix='notifycontext-skill-') as tmp:
         op = operator(request)
@@ -34,6 +35,8 @@ def main():
         env = {**os.environ, 'XDG_CACHE_HOME': str(Path(tmp) / 'cache'),
                'NOTIFYCONTEXT_URL': request.base_url, 'NOTIFYCONTEXT_USER_EMAIL': 'sender@example.com',
                'NOTIFYCONTEXT_USER_PASSWORD': PASSWORD}
+        if args.trace:
+            command = [sys.executable, '-m', 'observecontext_client', 'capture', '--url', request.base_url, '--service', 'notifycontext.client', '--output', str(Path(tmp) / 'trace.jsonl'), '--', *command]
         def cli(*argv, expected=0):
             result = subprocess.run([*command, *argv], env=env, cwd=tmp, capture_output=True, text=True)
             assert PASSWORD not in result.stdout + result.stderr and token not in result.stdout + result.stderr
@@ -108,6 +111,12 @@ def main():
         history = json.loads(cli('backlog', '--sent', '--include-withdrawn'))
         assert next(row for row in history['items'] if row['notification_id'] == pending['id'])['signup_status'] == 'withdrawn'
         cli('logout')
+        if args.trace:
+            trace_text = (Path(tmp) / 'trace.jsonl').read_text()
+            events = [json.loads(line) for line in trace_text.splitlines()]
+            assert events and all(not event['sql'] for event in events)
+            assert PASSWORD not in trace_text and token not in trace_text
+            assert 'Synthetic supplier review' not in trace_text
     print('Portable skill, schema, backlog and explicit mutation checks passed.')
 
 
