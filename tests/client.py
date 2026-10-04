@@ -6,9 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location('nc', Path(__file__).resolve().parents[1] / 'skills/notifycontext/scripts/nc.py')
-nc = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(nc)
+from notifycontext_client import cli as nc
 
 
 class ClientTest(unittest.TestCase):

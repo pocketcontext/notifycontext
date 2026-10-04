@@ -28,7 +28,7 @@ import urllib.parse
 import urllib.request
 
 ENV = ['NOTIFYCONTEXT_URL', 'NOTIFYCONTEXT_USER_EMAIL', 'NOTIFYCONTEXT_USER_PASSWORD']
-SCHEMA_FILE = Path(__file__).resolve().parent.parent / 'references' / 'schema.json'
+SCHEMA_FILE = Path(__file__).with_name('schema.json')
 TIMEOUT = 30
 USER_AGENT = 'NotifyContext/1.0'
 hidden = []  # The password and tokens. say() masks them in everything it prints.
@@ -140,7 +140,7 @@ def send(cfg, method, path, body=None, token=None, timeout=TIMEOUT):
 
 def login(cfg):
     if not cfg.get('password'):
-        raise Fail(2, 'Set NOTIFYCONTEXT_USER_PASSWORD for password login, or run nc.py login --google for browser sign-in.')
+        raise Fail(2, 'Set NOTIFYCONTEXT_USER_PASSWORD for password login, or run notifycontext login --google for browser sign-in.')
     status, data = send(cfg, 'POST', '/api/collections/users/auth-with-password', {'identity': cfg['email'], 'password': cfg['password']})
     if status != 200 or not isinstance(data, dict) or 'token' not in data:
         raise Fail(1, f'login as {cfg["email"]} failed: HTTP {status}\n{dump(data)}\nCheck the three NOTIFYCONTEXT_ variables with the user. User credentials only.')
@@ -222,7 +222,7 @@ def google_login(cfg, port=8765, timeout=180):
             if not valid:
                 status, message = 400, 'Invalid sign-in callback. Return to your terminal.'
             elif 'error' in values:
-                outcome['error'] = 'Google sign-in was denied or cancelled; run nc.py login --google to retry.'
+                outcome['error'] = 'Google sign-in was denied or cancelled; run notifycontext login --google to retry.'
                 status, message = 400, 'Sign-in was cancelled. Return to your terminal.'
             elif len(code) != 1 or not code[0]:
                 outcome['error'] = 'Google returned an invalid sign-in callback.'
@@ -258,7 +258,7 @@ def google_login(cfg, port=8765, timeout=180):
         while not outcome and time.monotonic() < deadline:
             server.handle_request()
     if not outcome:
-        raise Fail(1, 'Google sign-in timed out; run nc.py login --google to retry.')
+        raise Fail(1, 'Google sign-in timed out; run notifycontext login --google to retry.')
     if 'error' in outcome:
         raise Fail(1, outcome['error'])
     status, data = oauth_send(cfg, 'POST', '/api/collections/users/auth-with-oauth2', {
@@ -288,14 +288,14 @@ def call(cfg, method, path, body=None):
         # Renew at most every five minutes, or near expiry, to respect auth rate limits.
         status, data = oauth_send(cfg, 'POST', '/api/collections/users/auth-refresh', token=session['token'])
         if status != 200:
-            raise Fail(1, f'Google session could not be refreshed (HTTP {status}); run nc.py login --google again.')
+            raise Fail(1, f'Google session could not be refreshed (HTTP {status}); run notifycontext login --google again.')
         session = auth_session(cfg, data, 'google')
         if path == '/api/collections/users/auth-refresh':
             return status, data
     status, data = send(cfg, method, path, body, session['token'])
     if cached and 400 <= status < 500 and status != 409 and (status == 401 or token_rejected(cfg, session['token'])):
         if session.get('method') == 'google':
-            raise Fail(1, 'Google session was rejected; run nc.py login --google again.')
+            raise Fail(1, 'Google session was rejected; run notifycontext login --google again.')
         session = login(cfg)
         status, data = send(cfg, method, path, body, session['token'])
     return status, data
@@ -367,7 +367,7 @@ def check(cfg):
         return 0
     for line in differences:
         say(line, sys.stdout)
-    say('The server is authoritative: run `nc.py schema` and follow the server\'s error messages where the reference files disagree. '
+    say('The server is authoritative: run `notifycontext schema` and follow the server\'s error messages where the reference files disagree. '
         'Ask the user to update this skill.', sys.stdout)
     return 3
 
@@ -594,17 +594,23 @@ def parse(argv):
     return parser.parse_args(argv)
 
 
-def main():
+def _main():
     try:
         return run(parse(sys.argv[1:]))
     except Fail as error:
-        say(f'nc.py: {error}')
+        say(f'notifycontext: {error}')
         return error.code
     except KeyboardInterrupt:
         return 130
     except Exception as error:
-        say(f'nc.py: unexpected {type(error).__name__}: {error}')
+        say(f'notifycontext: unexpected {type(error).__name__}: {error}')
         return 1
+
+
+def main():
+    from observecontext_client.instrumentation import instrument_cli
+    with instrument_cli(service='notifycontext.client', opener=opener):
+        return _main()
 
 
 if __name__ == '__main__':

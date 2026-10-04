@@ -1,6 +1,6 @@
 # Data and authorization
 
-Use `nc.py schema` for authoritative SQL columns; `schema.json` is the tested snapshot. The default PocketBase `users` auth collection is not exposed to SQL. `user_directory` provides admitted colleague IDs/names without email addresses.
+Use `notifycontext schema` for authoritative SQL columns; `schema.json` is the tested snapshot. The default PocketBase `users` auth collection is not exposed to SQL. `user_directory` provides admitted colleague IDs/names without email addresses.
 
 - `notifications`: immutable sender-attributed subject, `body_markdown`, kind (`fyi`, `review_requested`, `action_required`), `ack_required`, optional `due_at`, `submission_key`, server timestamps and revision. Withdrawal is the only sender update.
 - `notification_recipients`: notification relation and optional recipient relation; immutable `addressed_email` for email addressing, server-owned `claimed_at` and `claim_expires_at`; explicit `read_at`, `acknowledged_at`, `acknowledgement_markdown`, `archived_at`, revision. Sender sees recipient states and addressed emails; a bound recipient sees only their own row. Pending rows have no recipient ID and are visible only to the sender. ID-only rows have no addressed email; the directory never exposes email addresses.

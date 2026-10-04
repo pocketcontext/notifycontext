@@ -1,0 +1,13 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["notifycontext-client"]
+#
+# [tool.uv.sources]
+# notifycontext-client = { git = "https://github.com/pocketcontext/notifycontext.git", rev = "09394059fb31f5ad27bcdf659a827056be6f1573" }
+# ///
+"""Standalone launcher for the pinned NotifyContext client."""
+from notifycontext_client.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

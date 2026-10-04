@@ -5,7 +5,7 @@ description: Send general colleague notifications and manage a complete notifica
 
 # NotifyContext
 
-Use the portable Python standard-library client at `scripts/nc.py` from this skill directory. It works from any working directory. Configure `NOTIFYCONTEXT_URL` and `NOTIFYCONTEXT_USER_EMAIL`; use `login --google` for Workspace browser sign-in, or supply `NOTIFYCONTEXT_USER_PASSWORD` for an existing password account. Missing credentials must be supplied by the user; do not search unrelated files. Never use superuser credentials for ordinary work.
+Use the executable `notifycontext` launcher in this skill directory. Install uv, then run it by absolute path or copy it onto PATH. It installs the pinned client and dependencies on first use and works from any working directory. Configure `NOTIFYCONTEXT_URL` and `NOTIFYCONTEXT_USER_EMAIL`; use `login --google` for Workspace browser sign-in, or supply `NOTIFYCONTEXT_USER_PASSWORD` for an existing password account. Missing credentials must be supplied by the user; do not search unrelated files. Never use superuser credentials for ordinary work.
 
 Run `whoami` and `check` when establishing a session. `check` compares the live authenticated SQL schema with the bundled snapshot. On mismatch, inspect `schema` and use the server's actual contract. See [references/workflows.md](references/workflows.md) for commands and [references/schema.md](references/schema.md) for data and access rules.
 
@@ -30,3 +30,7 @@ The client reads through filtered SQL and writes through authenticated REST. Do 
 ## Browser links
 
 Include `NOTIFYCONTEXT_URL` (without its trailing slash) plus `/#/notifications/<notification-id>` when reporting a notification. Use its notification ID, not a recipient-row ID. The authenticated reader opens the record even when it is archived or outside the current result page. Published content is immutable, but withdrawal and recipient state are current; there is no historical-state URL. Links grant no access and opening them never marks read, acknowledges or archives. Do not copy private subjects or previews into a wiki with broader visibility.
+
+## Optional tracing
+
+Use `observecontext capture --url "$NOTIFYCONTEXT_URL" --service notifycontext.client --upload -- notifycontext COMMAND ...` for explicitly requested tracing. Configure and authenticate ObserveContext separately. Add `--capture-sql` only when SQL text may be retained. Normal commands do not capture traces; reads still never acknowledge notifications. Telemetry failures preserve command results.

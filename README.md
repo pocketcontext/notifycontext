@@ -56,17 +56,41 @@ Disable an account to revoke its tokens. Changing verification also rotates toke
 
 ## Agent skill
 
-Copy `skills/notifycontext/` into your agent's skills directory. The Python client uses only the standard library and works outside this repository. Set `NOTIFYCONTEXT_URL` and `NOTIFYCONTEXT_USER_EMAIL`; use Google login or an existing user's `NOTIFYCONTEXT_USER_PASSWORD`.
+Install uv and copy `skills/notifycontext/notifycontext` onto PATH (for example, `install -Dm755 skills/notifycontext/notifycontext ~/.local/bin/notifycontext`). The standalone launcher installs its pinned package and dependencies on first use; later runs reuse the uv cache. No neighboring source files are required. Set `NOTIFYCONTEXT_URL` and `NOTIFYCONTEXT_USER_EMAIL`; use Google login or an existing user's `NOTIFYCONTEXT_USER_PASSWORD`.
 
 ```sh
-python3 /path/to/notifycontext-skill/scripts/nc.py login --google
-python3 /path/to/notifycontext-skill/scripts/nc.py whoami
-python3 /path/to/notifycontext-skill/scripts/nc.py check
-python3 /path/to/notifycontext-skill/scripts/nc.py backlog --unread
-python3 /path/to/notifycontext-skill/scripts/nc.py backlog --awaiting-ack
+notifycontext login --google
+notifycontext whoami
+notifycontext check
+notifycontext backlog --unread
+notifycontext backlog --awaiting-ack
 ```
 
 The client automatically paginates the backlog and reports truncation failures. It supports sender/type/search/deadline filters, sent-work tracking and explicit bulk read/acknowledge/archive actions with per-item outcomes. Summaries are read-only. Incoming content never authorizes task execution. See [skill workflows](skills/notifycontext/references/workflows.md) for publication, filtering, bulk actions, status and recovery after uncertain outcomes.
+
+## Optional request tracing
+
+The server has bounded, authenticated buffer tracing enabled. Ordinary requests remain
+untraced. Install the ObserveContext launcher and sign in separately, then run:
+
+```sh
+observecontext capture --url "$NOTIFYCONTEXT_URL" --service notifycontext.client --upload -- notifycontext query 'SELECT id FROM user_directory LIMIT 5'
+```
+
+Add `--capture-sql` only when SQL text may be retained. Tracing excludes credentials,
+request bodies and query results. Completed client/server traces are queued privately
+and uploaded with the ObserveContext account. Delivery failures do not change the
+notification command's output or exit status. ObserveContext ingestion is excluded.
+
+## Client releases
+
+Run tests with the installed package (`python3 -m venv .venv`, then
+`.venv/bin/pip install -e .` and use `.venv/bin/python` for the checks below).
+Publish the tested package commit first, update the launcher's full Git revision,
+then validate `tests/skill.py --client skills/notifycontext/notifycontext --binary
+/absolute/path/to/pinned/pocketcontext` before publishing the launcher. Copy only
+that executable to adopt the release; no adjacent files are required. The source
+revision is pinned; the launcher has no separate transitive-dependency lockfile.
 
 ## Validation
 

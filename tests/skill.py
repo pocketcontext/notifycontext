@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import sys
 from integration import ROOT, server, operator, account, PASSWORD, path, query
 
 
@@ -14,6 +15,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--binary', required=True)
     parser.add_argument('--write-schema', action='store_true')
+    parser.add_argument('--client', type=Path, help='Copy and execute a standalone launcher using uv')
     args = parser.parse_args()
     with server(args.binary, env={'NOTIFYCONTEXT_GOOGLE_WORKSPACE_DOMAIN': 'example.com'}) as request, tempfile.TemporaryDirectory(prefix='notifycontext-skill-') as tmp:
         op = operator(request)
@@ -23,14 +25,17 @@ def main():
         snapshot = ROOT / 'skills/notifycontext/references/schema.json'
         if args.write_schema:
             snapshot.write_text(json.dumps(schema, indent=2) + '\n')
+            (ROOT / 'src/notifycontext_client/schema.json').write_bytes(snapshot.read_bytes())
         assert json.loads(snapshot.read_text()) == schema, 'Schema changed; review and regenerate snapshot'
-        skill = Path(tmp) / 'portable'
-        shutil.copytree(ROOT / 'skills/notifycontext', skill)
+        skill = Path(tmp) / 'notifycontext'
+        shutil.copy2(args.client or ROOT / 'skills/notifycontext/notifycontext', skill)
+        command = [str(skill)] if args.client else [sys.executable, str(skill)]
+        assert (ROOT / 'src/notifycontext_client/schema.json').read_bytes() == snapshot.read_bytes()
         env = {**os.environ, 'XDG_CACHE_HOME': str(Path(tmp) / 'cache'),
                'NOTIFYCONTEXT_URL': request.base_url, 'NOTIFYCONTEXT_USER_EMAIL': 'sender@example.com',
                'NOTIFYCONTEXT_USER_PASSWORD': PASSWORD}
         def cli(*argv, expected=0):
-            result = subprocess.run(['python3', str(skill / 'scripts/nc.py'), *argv], env=env, cwd=tmp, capture_output=True, text=True)
+            result = subprocess.run([*command, *argv], env=env, cwd=tmp, capture_output=True, text=True)
             assert PASSWORD not in result.stdout + result.stderr and token not in result.stdout + result.stderr
             assert result.returncode == expected, (argv, result.stdout, result.stderr)
             return result.stdout

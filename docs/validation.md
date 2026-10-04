@@ -99,3 +99,16 @@ and 2x display scales, including a dark browser theme. Counts 1, 9, 10, 24, 99 a
 99+ remain visible with the N mark; zero uses the plain mark. The exact count stays
 in the title/sidebar. This is a Linux Chromium check, not a guarantee for every
 browser, device, suspension policy or native desktop notification configuration.
+
+## Packaged CLI and tracing — 4 October 2026
+
+The full-name `notifycontext` launcher replaces the former Python script; no
+compatibility wrapper is shipped. The package owns the client and schema snapshot
+and pins the ObserveContext instrumentation dependency. The server enables opt-in
+bounded buffer tracing; ordinary requests remain untraced.
+
+Local integration, security, realtime, auth, OAuth integration, pending-recipient,
+portable skill, deployment, populated backup, client, OAuth and deployment-workflow
+checks passed against server `a92b0de5e1b66b6d3b6135b90092d2d6da5f7cc8` in isolated
+synthetic databases. Frontend build and all 22 browser fixture tests passed.
+Remote copied-launcher and release container checks are recorded with the release.
