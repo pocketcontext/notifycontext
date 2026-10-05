@@ -112,3 +112,15 @@ portable skill, deployment, populated backup, client, OAuth and deployment-workf
 checks passed against server `a92b0de5e1b66b6d3b6135b90092d2d6da5f7cc8` in isolated
 synthetic databases. Frontend build and all 22 browser fixture tests passed.
 Remote copied-launcher and release container checks are recorded with the release.
+
+## Runtime maintenance adoption
+
+Release gates include `python3 tests/maintenance_entrypoint.py` and
+`python3 tests/maintenance.py --binary /absolute/path/to/pinned/pocketcontext`.
+They exercise superuser-only control, denied publication/acknowledgement/batch
+writes, retained filtered-read privacy, auth refresh, generation conflicts,
+frozen restart with changed deployment credentials, pending-migration rejection,
+and explicit thaw with publication deduplication preserved. Startup cases cover
+private regular markers, malformed state, missing databases, skipped restoration
+and preserved operator credentials. The server's maintenance suite separately
+checks in-flight write draining and managed SQLite connections.

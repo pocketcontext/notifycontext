@@ -38,10 +38,14 @@ jobs:
         with:
           go-version-file: pocketcontext/go.mod
           cache-dependency-path: pocketcontext/go.sum
+      - name: Test maintenance entrypoint
+        run: python3 notifycontext/tests/maintenance_entrypoint.py
       - name: Build server
         working-directory: pocketcontext
         # The flags of pocketcontext's Makefile.
         run: CGO_ENABLED=1 go build -tags sqlite_math_functions -o bin/pocketcontext ./cmd/pocketcontext
+      - name: Test maintenance freeze and frozen restart
+        run: python3 notifycontext/tests/maintenance.py --binary pocketcontext/bin/pocketcontext
       - name: Test notifications
         run: python3 notifycontext/tests/integration.py --binary pocketcontext/bin/pocketcontext
       - name: Test authentication and deployment settings

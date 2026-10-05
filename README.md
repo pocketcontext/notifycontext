@@ -115,6 +115,34 @@ Frontend browser commands and actual results are recorded in [validation evidenc
 
 ## Infrastructure provenance
 
-The application domain model is independent. Authentication, Google login, account lifecycle, container replication and locked deployment patterns were adapted from RaiseContext `d9e337a05fddfdc26e082f8e1a1e3b0efb0c0e52`; filtered-snapshot patterns were inspected in ChatContext `7fac3712007b8d123620f46eb93888bf8e51118b`. The server pin is `a92b0de5e1b66b6d3b6135b90092d2d6da5f7cc8`.
+The application domain model is independent. Authentication, Google login, account lifecycle, container replication and locked deployment patterns were adapted from RaiseContext `d9e337a05fddfdc26e082f8e1a1e3b0efb0c0e52`; filtered-snapshot patterns were inspected in ChatContext `7fac3712007b8d123620f46eb93888bf8e51118b`. The server pin is `976ddf71a4734530adefe4a56633658a0894b449`.
 
 Source is public at https://github.com/pocketcontext/notifycontext. The public application is deployed at https://notify.pocketcontext.com; see [deployment status](DEPLOYMENT.md) for verified release evidence and remaining setup.
+
+## Runtime maintenance freeze
+
+Superusers inspect `GET /api/context/maintenance` and toggle with
+`PUT /api/context/maintenance` using `{"readOnly":true,"expectedGeneration":N}`.
+Use the returned generation; wait for confirmed `read_only` before taking a final
+migration snapshot. Active writes drain, subsequent mutations return 503, and
+authorized SQL reads and original downloads remain available. Existing sessions
+can refresh; login flows requiring writes may fail. Thaw explicitly with
+`readOnly:false` and the current generation. Stale generations return 409.
+
+The private `pb_data/maintenance.json` marker must travel with a recovery snapshot.
+Frozen startup preserves the existing database, settings, OAuth identities and
+operator credentials; it skips restore and bootstrap provisioning and refuses
+missing databases, unsafe markers or pending migrations. This is not cross-host
+fencing: pause CD and stop/disable the source writer before activating a replacement.
+
+Release gates use synthetic data:
+
+```sh
+python3 tests/maintenance_entrypoint.py
+python3 tests/maintenance.py --binary /absolute/path/to/pinned/pocketcontext
+```
+
+Replicated startup waits for an initial Litestream IPC sync before serving. An
+unreachable replica fails startup. Fresh Google-only databases are initialized
+before this handshake; frozen starts always require the existing database. This
+ensures clean shutdown can sync even before the first periodic monitor tick.
