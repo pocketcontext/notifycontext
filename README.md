@@ -23,7 +23,7 @@ promise immediate updates. Desktop-alert pauses do not hide the unread count.
 Signing out or changing accounts clears the tab indicator; connection failures
 retain the last successful count. Opening a notification still does not mark it read.
 
-See [data model](docs/data-model.md), [security](docs/security.md), [validation evidence](docs/validation.md) and [deployment preparation](docs/deployment.md).
+See [data model](docs/data-model.md), [security](docs/security.md), [validation evidence](docs/validation.md) and [deployment](docs/deployment.md).
 
 ## Run locally
 
@@ -236,3 +236,18 @@ maintenance marker and consistent auxiliary database; Litestream restores neithe
 Run `python3 tests/entrypoint.py` for startup, interruption, configuration, file inventory
 and staged recovery safety checks. Container smoke fixtures explicitly initialize
 fresh databases against separate, bucket-scoped synthetic MinIO identities.
+
+## Continuous deployment
+
+After successful main-branch image publication, `image.yml` deploys through the
+main-only `once-v2` GitHub environment when `COLORS_PROFILE=once-v2` and
+`CONTEXT_DEPLOY_PAUSED` is not `true`. Publication retains its separate
+`NOTIFYCONTEXT_PUBLISH_ENABLED` guard. Set the pause to `true` to publish without
+deploying; it does not interrupt a deployment already running.
+
+The restricted SSH key sends no command and uses pinned host keys. The maintained
+`once-pocketcontext-v2` stop-first dispatcher preserves one writer, uses a
+300-second graceful stop and retains a pending marker after failure. It does not
+automatically roll back. ONCE automatic updates remain disabled. The app-local
+legacy deployment wrapper and installer are retired and refuse to run.
+See [deployment controls and recovery](docs/deployment.md).

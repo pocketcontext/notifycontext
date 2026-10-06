@@ -1,112 +1,125 @@
 #!/usr/bin/env python3
-"""Exercise deployment orchestration without Docker, root, network or credentials."""
-import importlib.util
+"""Deployment workflow and retired-entrypoint checks without live services."""
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
+import textwrap
 import unittest
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+WORKFLOW = (ROOT / '.github/workflows/image.yml').read_text()
+PUBLICATION, DEPLOYMENT = WORKFLOW.split('  deploy:\n', 1)
 
 
-def load(name, filename):
-    spec = importlib.util.spec_from_file_location(name, ROOT / "deploy" / filename)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-hook = load("hook", "deploy-notifycontext.py")
-installer = load("installer", "install.py")
+def step_script(name):
+    step = DEPLOYMENT.split('      - name: ' + name + '\n', 1)[1]
+    body = step.split('        run: |\n', 1)[1].split('      - name:', 1)[0]
+    return textwrap.dedent(body)
 
 
 class DeploymentTests(unittest.TestCase):
-    def run_hook(self, fail=None, killed=False, count=1, recovery_count=None, image=None):
-        calls = []
-        inspections = 0
-        def command(*args, capture=False):
-            nonlocal inspections
-            calls.append(args)
-            if args[:2] == fail:
-                raise RuntimeError("stub failure")
-            if args[:2] == ("docker", "ps"):
-                return "old"
-            if args[:2] == ("docker", "inspect"):
-                if "--format" in args:
-                    return json.dumps({"Running": False, "ExitCode": 137 if killed else 0})
-                inspections += 1
-                size = recovery_count if inspections > 1 and recovery_count is not None else count
-                return json.dumps([{"Id": "old", "Config": {"Image": image or hook.IMAGE, "Labels": {
-                    "once": json.dumps({"host": hook.HOST, "env": {"SECRET": "never print"}})}}}] * size)
-            return ""
-        with patch.object(hook, "run", side_effect=command):
-            if fail or killed or count != 1 or image == "ghcr.io/pocketcontext/dealcontext:latest":
-                with self.assertRaises(RuntimeError):
-                    hook.deploy()
-            else:
-                hook.deploy()
-        return calls
+    def test_pause_only_gates_deployment_after_successful_publication(self):
+        self.assertEqual(DEPLOYMENT.splitlines()[0].strip(),
+            "if: vars.CONTEXT_DEPLOY_PAUSED != 'true' && vars.COLORS_PROFILE != ''")
+        self.assertIn('    needs:\n      - manifest\n', DEPLOYMENT)
+        self.assertNotIn('CONTEXT_DEPLOY_PAUSED', PUBLICATION)
+        self.assertIn("vars.NOTIFYCONTEXT_PUBLISH_ENABLED == 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", PUBLICATION)
+        self.assertNotIn('always()', DEPLOYMENT)
+        self.assertNotIn('continue-on-error', DEPLOYMENT)
 
-    def test_order(self):
-        calls = self.run_hook()
-        self.assertEqual([c[:2] for c in calls], [
-            ("docker", "ps"), ("docker", "inspect"), ("docker", "pull"),
-            ("docker", "stop"), ("docker", "inspect"), ("once", "update")])
-        self.assertEqual(calls[3], ("docker", "stop", "--time", "60", "old"))
-        self.assertEqual(calls[-1], ("once", "update", hook.HOST, "--image", hook.IMAGE, "--auto-update=false"))
+    def test_environment_and_concurrency_preserve_active_deployment(self):
+        self.assertIn('    permissions: {}\n', DEPLOYMENT)
+        self.assertIn('    environment:\n      name: ${{ vars.COLORS_PROFILE }}\n', DEPLOYMENT)
+        self.assertIn('      group: deploy-${{ vars.COLORS_PROFILE }}\n      cancel-in-progress: false\n', DEPLOYMENT)
+        self.assertIn('    timeout-minutes: 30\n', DEPLOYMENT)
+        for setting in ('SERVER_IP', 'SERVER_USER', 'SSH_KNOWN_HOSTS'):
+            self.assertIn(setting + ': ${{ vars.' + setting + ' }}', DEPLOYMENT)
+        self.assertIn('SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}', DEPLOYMENT)
 
-    def test_adopts_initial_pinned_notifycontext_image(self):
-        calls = self.run_hook(image="ghcr.io/pocketcontext/notifycontext@sha256:" + "a" * 64)
-        self.assertEqual(calls[-1], ("once", "update", hook.HOST, "--image", hook.IMAGE, "--auto-update=false"))
+    def shell_fixture(self, script, hosts='synthetic-host-key', fail_ssh=False):
+        with tempfile.TemporaryDirectory(prefix='notify-deployment-') as temp:
+            root = Path(temp)
+            binaries = root / 'bin'
+            binaries.mkdir()
+            stub = '#!' + sys.executable + '\n' + textwrap.dedent('''\
+                import json, os, sys
+                from pathlib import Path
+                name = Path(sys.argv[0]).name
+                with open(os.environ['CALLS'], 'a') as log:
+                    log.write(json.dumps([name, *sys.argv[1:]]) + '\\n')
+                if name == 'ssh-add':
+                    Path(os.environ['KEY_INPUT']).write_text(sys.stdin.read())
+                if name == 'ssh':
+                    assert sys.stdin.read() == ''
+                    sys.exit(int(os.environ.get('SSH_RESULT', '0')))
+                ''')
+            for name in ('ssh-agent', 'ssh-add', 'ssh', 'curl'):
+                target = binaries / name
+                target.write_text(stub)
+                target.chmod(0o700)
+            env = {'PATH': str(binaries) + os.pathsep + os.environ['PATH'], 'HOME': str(root),
+                   'CALLS': str(root / 'calls'), 'KEY_INPUT': str(root / 'key'),
+                   'SSH_PRIVATE_KEY': 'synthetic-private-key\r\n', 'SSH_KNOWN_HOSTS': hosts,
+                   'SERVER_USER': 'deploy', 'SERVER_IP': '192.0.2.1',
+                   'SSH_RESULT': '9' if fail_ssh else '0'}
+            result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script],
+                                    env=env, capture_output=True, text=True)
+            calls = [json.loads(line) for line in (root / 'calls').read_text().splitlines()] if (root / 'calls').exists() else []
+            known = root / '.ssh/known_hosts'
+            return result, calls, known.read_text() if known.exists() else '', (root / 'key').read_text() if (root / 'key').exists() else ''
 
-    def test_wrong_application_image_never_mutates(self):
-        self.assertEqual(len(self.run_hook(image="ghcr.io/pocketcontext/dealcontext:latest")), 2)
+    def test_restricted_ssh_receives_no_remote_command_and_pinned_key(self):
+        result, calls, known, key = self.shell_fixture(step_script('Deploy via SSH'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, [['ssh-agent', '-s'], ['ssh-add', '-'],
+            ['ssh', '-T', '-o', 'StrictHostKeyChecking=yes', 'deploy@192.0.2.1']])
+        self.assertEqual(known, 'synthetic-host-key\n')
+        self.assertEqual(key, 'synthetic-private-key\n\n')
+        self.assertNotIn('synthetic-private-key', result.stdout + result.stderr)
 
-    def test_pull_failure_does_not_stop(self):
-        calls = self.run_hook(fail=("docker", "pull"))
-        self.assertNotIn(("docker", "stop"), [c[:2] for c in calls])
-        self.assertNotIn(("once", "start"), [c[:2] for c in calls])
+    def test_missing_pinned_host_key_prevents_connection(self):
+        result, calls, known, _ = self.shell_fixture(step_script('Deploy via SSH'), hosts='')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('ssh', [call[0] for call in calls])
+        self.assertEqual(known, '')
 
-    def test_update_failure_recovers_and_fails(self):
-        self.assertEqual(self.run_hook(fail=("once", "update"))[-1], ("docker", "start", "old"))
+    def test_remote_failure_propagates(self):
+        result, _, _, _ = self.shell_fixture(step_script('Deploy via SSH'), fail_ssh=True)
+        self.assertEqual(result.returncode, 9)
 
-    def test_stop_failure_recovers_without_update(self):
-        calls = self.run_hook(fail=("docker", "stop"))
-        self.assertEqual(calls[-1], ("docker", "start", "old"))
-        self.assertNotIn(("once", "update"), [c[:2] for c in calls])
+    def test_health_targets_only_notify_with_bounded_retries(self):
+        result, calls, _, _ = self.shell_fixture(step_script('Verify public health'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], 'curl')
+        self.assertEqual(calls[0][-1], 'https://notify.pocketcontext.com/up')
+        for flag in ('--fail', '--connect-timeout', '--max-time', '--retry-max-time'):
+            self.assertIn(flag, calls[0])
 
-    def test_forced_stop_does_not_update(self):
-        calls = self.run_hook(killed=True)
-        self.assertEqual(calls[-1], ("docker", "start", "old"))
-        self.assertNotIn(("once", "update"), [c[:2] for c in calls])
-
-    def test_ambiguous_containers_never_mutate(self):
-        self.assertEqual(len(self.run_hook(count=2)), 2)
-
-    def test_ambiguous_recovery_never_starts_another_writer(self):
-        calls = self.run_hook(fail=("once", "update"), recovery_count=2)
-        self.assertNotIn(("docker", "start"), [c[:2] for c in calls])
-
-    def test_missing_old_container_never_starts_another_writer(self):
-        calls = self.run_hook(fail=("once", "update"), recovery_count=0)
-        self.assertNotIn(("docker", "start"), [c[:2] for c in calls])
-
-    def test_arguments_rejected_before_commands(self):
-        with patch.object(sys, "argv", ["deploy-notifycontext", "other-host"]), patch.object(hook, "run") as run:
-            with self.assertRaises(RuntimeError):
-                hook.main()
-            run.assert_not_called()
-
-    def test_installer_preserves_other_keys_and_restrictions(self):
-        website = 'restrict,command="/usr/local/bin/deploy www.pocketcontext.com" ssh-ed25519 AAA website\n'
-        crm = f'no-port-forwarding,no-pty,{installer.OLD} ssh-ed25519 BBB crm\n'
-        result = installer.rewrite_keys(website + crm + crm)
-        self.assertEqual(result, website + (crm.replace(installer.OLD, installer.NEW) * 2))
-        self.assertEqual(installer.rewrite_keys(result), result)
-        with self.assertRaises(RuntimeError):
-            installer.rewrite_keys(website)
+    def test_retired_commands_refuse_without_touching_keys_or_calling_tools(self):
+        with tempfile.TemporaryDirectory(prefix='notify-retired-deploy-') as temp:
+            root = Path(temp)
+            keys = root / '.ssh/authorized_keys'
+            keys.parent.mkdir()
+            keys.write_text('preserve every existing key\n')
+            for command in ('docker', 'once', 'sudo', 'visudo'):
+                trap = root / command
+                trap.write_text('#!/bin/sh\ntouch "$HOME/unexpected-call"\nexit 99\n')
+                trap.chmod(0o700)
+            for name in ('deploy-notifycontext.py', 'install.py'):
+                for args in ([], ['other-host']):
+                    with self.subTest(name=name, args=args):
+                        result = subprocess.run([sys.executable, str(ROOT / 'deploy' / name), *args],
+                            env={'PATH': str(root), 'HOME': str(root)}, capture_output=True, text=True)
+                        self.assertEqual(result.returncode, 1)
+                        self.assertIn('once-pocketcontext-v2', result.stderr)
+                        self.assertIn('retired', result.stderr)
+                        self.assertFalse((root / 'unexpected-call').exists())
+                        self.assertEqual(keys.read_text(), 'preserve every existing key\n')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

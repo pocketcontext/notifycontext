@@ -44,7 +44,7 @@ Docker CLI access is denied by the local daemon, and noninteractive sudo is unav
 
 Production Google provider configuration, HTTPS/proxy behavior, dedicated EU R2 access, recovery and deployment were subsequently verified. Live Google browser sign-in, real operating-system popup delivery and actual recipient device compatibility remain unverified. Desktop alerts require an open authenticated browser client; there is no background Web Push.
 
-Application image publication is gated by `NOTIFYCONTEXT_PUBLISH_ENABLED` and passing release checks. Public publication was subsequently authorized and enabled; see the release status above. Deployment preparation is in `docs/deployment.md`; no automatic production deployment workflow is active.
+Application image publication is gated by `NOTIFYCONTEXT_PUBLISH_ENABLED` and passing release checks. Public publication was subsequently authorized and enabled; see the release status above. At this initial release, no automatic production deployment workflow was active. Current deployment controls are in `docs/deployment.md`.
 
 ## Pending email recipients — 28 September 2026
 
@@ -149,3 +149,15 @@ missing referenced objects: all fail without installing a database. Returning th
 held synthetic object allows successful recovery. No image was published and no
 production deployment or real data was changed. Browser assets were built by the
 image; browser UI source was unchanged.
+
+## Destination continuous deployment — 6 October 2026
+
+The image workflow now includes deployment after successful manifest publication,
+with the existing publication guard retained. Seven offline deployment tests pass:
+pause/profile and publication dependency, environment/concurrency, actual commandless
+SSH invocation, missing host-key refusal, remote failure propagation, bounded Notify
+health checks, and both legacy commands refusing without changing keys or invoking
+deployment tools. These replace tests of the retired source-host rollback wrapper.
+The maintained destination dispatcher owns stop-first and pending-marker semantics.
+Local workflow tests do not establish GitHub environment setup or live activation;
+record those separately after verification.
