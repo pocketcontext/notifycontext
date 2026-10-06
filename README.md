@@ -1,5 +1,7 @@
 # NotifyContext
 
+Current release controls and platform coverage: [common CI and deployment contract](docs/ci-and-deployment.md).
+
 General-purpose colleague notifications with Markdown, explicit acknowledgements, a browser inbox and an agent skill for handling a complete notification backlog. Use it for sales, finance, hiring, operations, documents or any other work. A notification may stand alone or link to evidence in another system. Underlying task completion stays in its source system.
 
 ## Behavior
