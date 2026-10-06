@@ -77,6 +77,7 @@ def main():
                 'LITESTREAM_ACCESS_KEY_ID': keys['replica'][0], 'LITESTREAM_SECRET_ACCESS_KEY': keys['replica'][1],
                 'LITESTREAM_SYNC_INTERVAL': '1h'})
             first, second = network + '-source', network + '-restored'
+            s.initialize_app(args.image, first, env, network)
             s.run_app(args.image, first, first, env, network)
             base = s.wait_up(first)
             admin = s.superuser_token(base, env[PREFIX + '_SUPERUSER_EMAIL'], env[PREFIX + '_SUPERUSER_PASSWORD'])
@@ -178,7 +179,6 @@ def main():
             s.docker('volume', 'rm', first)
             s.volumes.remove(first)
             s.run_app(args.image, second, second, env, network)
-            s.volumes.remove(second)  # run_app registers the already-created volume again.
             base = s.wait_up(second)
             s.check(api('GET', '/api/context/maintenance')['state'] == 'read_only', 'fresh restored host stays frozen')
             download(owner_token, True, late_path)
@@ -201,7 +201,29 @@ def main():
             # Disaster recovery: normal entrypoint, truly empty volume, no manual
             # SQLite restoration, auxiliary database or maintenance marker copying.
             third = network + '-automatic'
+            s.docker('volume', 'create', third)
+            s.volumes.append(third)
+            init_args = ['run', '--rm', '--network', network, '-v', third + ':/storage']
+            for key in env:
+                init_args += ['-e', key]
+            status, output = s.docker(*init_args, args.image, 'init', env=env, ok=False)
+            s.check(status != 0 and 'replica already exists' in output,
+                    'explicit init refuses a populated replica')
+            s.check_database_absent(args.image, third)
+            object_key = '/'.join(automatic_path.split('/')[-3:])
+            s.docker('exec', '-e', 'MC_HOST_test', minio, 'mc', 'mv',
+                     'test/files/' + object_key, 'test/files/' + object_key + '.held', env=mc)
             s.run_app(args.image, third, third, env, network)
+            for _ in range(60):
+                running, code = s.state_quiet(third)
+                if not running:
+                    break
+                time.sleep(1)
+            s.check(not running and code != 0, 'missing referenced object refuses recovery')
+            s.check_database_absent(args.image, third)
+            s.docker('exec', '-e', 'MC_HOST_test', minio, 'mc', 'mv',
+                     'test/files/' + object_key + '.held', 'test/files/' + object_key, env=mc)
+            s.docker('start', third)
             base = s.wait_up(third)
             restored_admin = s.superuser_token(base, env[PREFIX + '_SUPERUSER_EMAIL'], env[PREFIX + '_SUPERUSER_PASSWORD'])
             s.check(api('GET', '/api/context/maintenance', token=restored_admin)['state'] == 'writable',
@@ -220,7 +242,7 @@ def main():
                 'p=Path("/storage/pb_data/auxiliary.db"); assert p.is_file(); '
                 'db=sqlite3.connect(p.as_uri()+"?mode=ro",uri=True); '
                 'assert db.execute("PRAGMA integrity_check").fetchone()==("ok",)')
-            s.check('post-restore integrity check passed' in s.logs(third), 'normal entrypoint restored and verified SQLite')
+            s.check('database restored and remote files readable' in s.logs(third), 'normal entrypoint restored and verified SQLite')
             s.stop(third)
             s.check_logs(third)
             failed = False

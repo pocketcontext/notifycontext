@@ -124,3 +124,28 @@ and explicit thaw with publication deduplication preserved. Startup cases cover
 private regular markers, malformed state, missing databases, skipped restoration
 and preserved operator credentials. The server's maintenance suite separately
 checks in-flight write draining and managed SQLite connections.
+
+## Strict container startup and recovery — 6 October 2026
+
+The production container now requires primary S3 and Litestream and uses a Python
+entrypoint. Fresh installation requires explicit `init`; normal empty-volume
+startup requires a replica. Recovery stages SQLite and reads every referenced file
+before atomic installation. File checks prove readability and complete transfer,
+not cryptographic content integrity; NotifyContext has no authoritative file hashes.
+
+Local validation used the unchanged pinned `976ddf71` server and synthetic isolated
+records. All documented application Python suites passed, including copied skill,
+notification/privacy/realtime/auth/OAuth/pending-recipient, deployment, backup,
+maintenance, primary-storage settings, client/OAuth utilities and deployment wrapper.
+The consolidated entrypoint suite passed 41 tests, including avatars, multiple files,
+view aliases, unsafe references, interruption, secret suppression, frozen auxiliary
+state and staged recovery. The compatibility maintenance-entrypoint command runs
+this same suite. Recovery-comparison regression checks passed.
+
+The local image build, configuration errors, original smoke assertions, populated
+three-volume restore, and primary S3 recovery gates passed. The latter also checks
+ordinary startup with no replica, explicit init against a populated replica, and
+missing referenced objects: all fail without installing a database. Returning the
+held synthetic object allows successful recovery. No image was published and no
+production deployment or real data was changed. Browser assets were built by the
+image; browser UI source was unchanged.

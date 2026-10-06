@@ -143,8 +143,7 @@ python3 tests/maintenance.py --binary /absolute/path/to/pinned/pocketcontext
 ```
 
 Replicated startup waits for an initial Litestream IPC sync before serving. An
-unreachable replica fails startup. Fresh Google-only databases are initialized
-before this handshake; frozen starts always require the existing database. This
+unreachable replica fails startup. Fresh databases require a separate explicit `init` command before this handshake; frozen starts always require the existing database. This
 ensures clean shutdown can sync even before the first periodic monitor tick.
 
 ## Primary file object storage preparation
@@ -158,7 +157,7 @@ endpoint. Optional `NOTIFYCONTEXT_S3_FORCE_PATH_STYLE` is exactly `true` or
 credentials. A writable restart with stored S3 enabled requires explicit complete
 configuration, preventing accidental fallback to local disk. File credentials must
 be scoped to the primary bucket; Litestream uses a different bucket and key.
-With S3 unconfigured and disabled, existing local development behavior is preserved.
+The production container requires complete primary S3 and Litestream configuration. Direct local server development can still use local files.
 
 These credentials and the primary file bucket are separate from the
 `LITESTREAM_*` SQLite replica configuration. This application currently has no
@@ -167,15 +166,14 @@ as the default user avatar. It does not add attachment APIs or change file acces
 rules. Buckets must remain private and downloads go through PocketBase.
 
 Frozen startup requires complete S3 configuration matching stored settings,
-including credentials, and rejects changes before serving. Local frozen starts
-remain supported when S3 is disabled. Container preflight rejects partial settings
+including credentials, and rejects changes before serving. Direct local server frozen starts remain supported when S3 is disabled; the production container requires S3. Container preflight rejects partial settings
 and sharing either the primary file bucket or access key with Litestream.
 Enabling S3 does not copy existing files: reconcile every referenced object and
 its checksum before switching a production database. Preserve the maintenance
 marker and stop the old writer before thawing the replacement. Litestream
 replicates SQLite, not primary bucket contents; plan file retention independently.
-These changes are preparation only: they have not been deployed, and existing
-files and production databases have not been migrated.
+This container startup refactor has not been deployed. It does not migrate
+existing files or production databases.
 
 Validate the configuration and frozen-restart contract with:
 
@@ -213,3 +211,28 @@ stale-snapshot/private-copy regression checks. These used the pinned server and
 isolated synthetic data; images remain local and production has not been changed.
 Node.js 22 frontend build, all 22 browser tests and the actual-server browser
 workflow also passed.
+
+## Strict container startup and recovery
+
+The image uses one Python entrypoint with required private primary S3 and Litestream
+storage. `LITESTREAM_DISABLED` is unsupported. Existing volumes start normally;
+an empty volume must have a recoverable replica. A missing, unreachable or damaged
+replica stops startup without creating a new application.
+
+For a genuinely new installation, run the same image, private environment, network
+and `/storage` volume once with command `init`, then start it normally. Initialization
+refuses a populated replica or nonempty database directory. An interrupted init
+leaves `initialization.pending`; preserve that volume and recover deliberately.
+Do not run init to repair a missing production replica.
+
+Recovery stages SQLite outside the live data directory, checks integrity, inventories
+all actual PocketBase file fields (including user avatars), and streams every referenced
+S3 file to verify readability and complete transfer before installing the database
+atomically and syncing the directory. NotifyContext has no authoritative file hashes;
+this check does not establish cryptographic content integrity. Primary bucket backups
+and retention remain separate. Frozen recovery additionally requires the private
+maintenance marker and consistent auxiliary database; Litestream restores neither.
+
+Run `python3 tests/entrypoint.py` for startup, interruption, configuration, file inventory
+and staged recovery safety checks. Container smoke fixtures explicitly initialize
+fresh databases against separate, bucket-scoped synthetic MinIO identities.
