@@ -56,6 +56,10 @@ jobs:
         run: python3 notifycontext/tests/pending_recipients.py --binary pocketcontext/bin/pocketcontext
       - name: Test first-start deployment settings
         run: python3 notifycontext/tests/deploy.py --binary pocketcontext/bin/pocketcontext
+      - name: Recovery comparison safety
+        run: python3 notifycontext/tests/recovery_compare.py
+      - name: Primary file storage configuration
+        run: python3 notifycontext/tests/object_storage.py --binary pocketcontext/bin/pocketcontext
       - name: Test installable skill
         run: python3 notifycontext/tests/skill.py --binary pocketcontext/bin/pocketcontext
       - name: Test OAuth client

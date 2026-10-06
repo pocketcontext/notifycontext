@@ -67,6 +67,29 @@ elif [ -n "${NOTIFYCONTEXT_GOOGLE_CLIENT_SECRET:-}" ] && [ -z "${NOTIFYCONTEXT_G
 	die "NOTIFYCONTEXT_GOOGLE_CLIENT_SECRET requires NOTIFYCONTEXT_GOOGLE_CLIENT_ID"
 fi
 
+# Validate the primary-file contract before restoring or touching the database.
+# Values are never printed; file credentials must not be shared with Litestream.
+storage_configured=false
+for suffix in BUCKET ENDPOINT REGION ACCESS_KEY_ID SECRET_ACCESS_KEY FORCE_PATH_STYLE; do
+    eval "storage_value=\${NOTIFYCONTEXT_S3_${suffix}:-}"
+    [ -z "$storage_value" ] || storage_configured=true
+done
+if [ "$storage_configured" = true ]; then
+    for suffix in BUCKET ENDPOINT REGION ACCESS_KEY_ID SECRET_ACCESS_KEY; do
+        eval "storage_value=\${NOTIFYCONTEXT_S3_${suffix}:-}"
+        [ -n "$storage_value" ] || die "incomplete primary object storage configuration"
+    done
+    case "${NOTIFYCONTEXT_S3_FORCE_PATH_STYLE:-true}" in
+        true|false) ;;
+        *) die "invalid primary object storage path style" ;;
+    esac
+    [ "${NOTIFYCONTEXT_S3_BUCKET}" != "${LITESTREAM_BUCKET:-}" ] ||
+        die "primary files and database replicas require separate buckets"
+    [ "${NOTIFYCONTEXT_S3_ACCESS_KEY_ID}" != "${LITESTREAM_ACCESS_KEY_ID:-}" ] ||
+        die "primary files and database replicas require separate credentials"
+fi
+unset storage_value storage_configured suffix
+
 if [ "${1:-}" = serve ]; then
 	serve
 fi
