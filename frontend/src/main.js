@@ -23,17 +23,15 @@ function paintRoute() {
   all('.view-filters').forEach(menu=>{menu.hidden=menu.dataset.for!==state.view;});
   all('.view-filter').forEach(button=>button.classList.toggle('active',button.dataset.filter===state.filter));
   const title=$('#view-title');if(title)title.textContent=state.view==='sent'?'Sent':state.view==='archived'?'Archived':'Inbox';
+  const filter=$('#filter-label');if(filter)filter.textContent=filterOptions.find(([value])=>value===state.filter)?.[1] || 'All';
   const search=$('#search');if(search)search.value=state.search;
   if(state.search)searchOpen=true;
   syncSearchPanel();
 }
 function barHeight(){const bar=$('.app-bar');if(bar)document.documentElement.style.setProperty('--bar-height',`${bar.offsetHeight}px`);}
 function syncSearchPanel(){
-  const panel=$('#search-panel'),toggle=$('#search-toggle');
-  if(!panel)return;
-  const compact=window.matchMedia('(max-width:900px)').matches;
-  panel.hidden=compact && !searchOpen;
-  if(toggle)toggle.setAttribute('aria-expanded',String(compact && searchOpen));
+  const panel=$('#search-panel');
+  if(panel)panel.hidden=false;
   barHeight();
 }
 function setMobileNav(open) {
@@ -51,8 +49,7 @@ function setMobileNav(open) {
 function showList(){const panel=$('#detail');if(!panel)return;panel.classList.remove('open');panel.innerHTML='<p class="detail-placeholder">Select a notification.</p>';}
 document.addEventListener('keydown',event=>{
   if(event.key!=='Escape' || event.target?.closest?.('dialog'))return;
-  if($('#notification-nav')?.classList.contains('open')){setMobileNav(false);return;}
-  if(searchOpen && window.matchMedia('(max-width:900px)').matches){searchOpen=false;syncSearchPanel();}
+  if($('#notification-nav')?.classList.contains('open'))setMobileNav(false);
 },true);
 window.matchMedia('(max-width:900px)').addEventListener('change',event=>{if(!event.matches)setMobileNav(false);syncSearchPanel();});
 window.addEventListener('hashchange',()=>{if(!pb.authStore.isValid)return;Object.assign(state,routeState());paintRoute();void loadList().catch(error=>report(friendly(error),true));if(state.selected)void openDetail(state.selected);else showList();});
@@ -125,14 +122,12 @@ async function start() {
   const epoch=sessionEpoch,current=pb.authStore.record;
   Object.assign(state,routeState());
   if(state.search)searchOpen=true;
-  const compact=window.matchMedia('(max-width:900px)').matches;
-  $('#app').innerHTML=`<div class="workspace"><aside class="sidebar"><a href="#" class="brand"><span class="brand-mark">N</span><span>NotifyContext</span></a><button id="compose" class="primary compose"><span aria-hidden="true">＋</span> New notification</button><button id="nav-backdrop" class="nav-backdrop" type="button" aria-label="Dismiss notifications menu" hidden></button><nav id="notification-nav" aria-label="Notifications"><button class="nav active" data-view="inbox">Inbox <span id="unread-count" class="count">0</span></button>${filterMenu('inbox')}<button class="nav" data-view="sent">Sent <span aria-hidden="true">↗</span></button>${filterMenu('sent')}<button class="nav" data-view="archived">Archived</button>${filterMenu('archived')}<div class="sidebar-bottom"><p id="connection" class="connection">Connecting…</p><button id="settings" class="profile"><span class="avatar">${e((current.name||'U').slice(0,1))}</span><span><strong>${e(current.name || 'Your account')}</strong><small id="my-status">Not set</small></span><span aria-hidden="true">⌄</span></button><button id="signout" class="text-button">Sign out</button><button id="alerts" class="secondary alerts-control">Enable desktop alerts</button></div></nav></aside><main class="main"><header class="app-bar"><button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="notification-nav" aria-label="Open notifications menu"><span aria-hidden="true"></span></button><h1 id="view-title">Inbox</h1><button id="search-toggle" class="icon-button search-toggle" type="button" aria-expanded="false" aria-controls="search-panel" aria-label="Search notifications"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg></button><div id="search-panel" class="search-panel"${compact && !searchOpen ? ' hidden' : ''}><label class="search-field"><span class="sr-only">Search notifications</span><input id="search" type="search" placeholder="Search subjects and messages"></label><button id="copy-search" class="search-copy" type="button" aria-label="Copy search link" title="Copy search link"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 5"></path><path d="M14 11a5 5 0 0 0-7.07 0L5.5 12.43a5 5 0 0 0 7.07 7.07L14 18"></path></svg></button></div><button id="refresh" class="icon-button" aria-label="Refresh notifications">↻</button><button id="compose-bar" class="primary compose bar-compose" type="button" aria-label="New notification"><span aria-hidden="true">＋</span></button></header><div id="notice" class="notice" role="status" hidden></div><div class="content-grid"><section class="list-panel" aria-label="Notification list"><div id="list" aria-live="polite"></div><div class="pagination" id="pagination" hidden><button class="text-button" id="previous">← Previous</button><span id="page-label"></span><button class="text-button" id="next">Next →</button></div></section><section id="detail" class="detail-panel" aria-label="Notification detail"><p class="detail-placeholder">Select a notification.</p></section></div></main></div><dialog id="dialog"></dialog>`;
+  $('#app').innerHTML=`<div class="workspace"><aside class="sidebar"><a href="#" class="brand"><span class="brand-mark">N</span><span>NotifyContext</span></a><button id="compose" class="primary compose"><span aria-hidden="true">＋</span> New notification</button><button id="nav-backdrop" class="nav-backdrop" type="button" aria-label="Dismiss notifications menu" hidden></button><nav id="notification-nav" aria-label="Notifications"><a href="#" class="brand menu-brand"><span class="brand-mark">N</span><span>NotifyContext</span></a><button class="nav active" data-view="inbox">Inbox <span id="unread-count" class="count">0</span></button>${filterMenu('inbox')}<button class="nav" data-view="sent">Sent <span aria-hidden="true">↗</span></button>${filterMenu('sent')}<button class="nav" data-view="archived">Archived</button>${filterMenu('archived')}<div class="sidebar-bottom"><p id="connection" class="connection">Connecting…</p><button id="settings" class="profile"><span class="avatar">${e((current.name||'U').slice(0,1))}</span><span><strong>${e(current.name || 'Your account')}</strong><small id="my-status">Not set</small></span><span aria-hidden="true">⌄</span></button><button id="signout" class="text-button">Sign out</button><button id="alerts" class="secondary alerts-control">Enable desktop alerts</button></div></nav></aside><main class="main"><header class="app-bar"><button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="notification-nav" aria-label="Open notifications menu"><span aria-hidden="true"></span></button><div id="search-panel" class="search-panel"><label class="search-field"><span class="sr-only">Search notifications</span><input id="search" type="search" placeholder="Search subjects and messages"></label><button id="copy-search" class="search-copy" type="button" aria-label="Copy search link" title="Copy search link"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 5"></path><path d="M14 11a5 5 0 0 0-7.07 0L5.5 12.43a5 5 0 0 0 7.07 7.07L14 18"></path></svg></button></div><button id="refresh" class="icon-button" aria-label="Refresh notifications">↻</button><button id="compose-bar" class="primary compose bar-compose" type="button" aria-label="New notification"><span aria-hidden="true">＋</span></button></header><div class="context-bar" aria-label="Current list"><span id="view-title">Inbox</span><span id="filter-label">All</span></div><div id="notice" class="notice" role="status" hidden></div><div class="content-grid"><section class="list-panel" aria-label="Notification list"><div id="list" aria-live="polite"></div><div class="pagination" id="pagination" hidden><button class="text-button" id="previous">← Previous</button><span id="page-label"></span><button class="text-button" id="next">Next →</button></div></section><section id="detail" class="detail-panel" aria-label="Notification detail"><p class="detail-placeholder">Select a notification.</p></section></div></main></div><dialog id="dialog"></dialog>`;
   paintRoute();
     $('#copy-search').onclick=()=>void navigator.clipboard.writeText(new URL(routeHref(null),location.href).href).then(()=>report('Search link copied.')).catch(()=>report('Unable to copy link.',true));
   const openCompose=()=>{setMobileNav(false);compose();};
   $('#compose').onclick=openCompose;
   $('#compose-bar').onclick=openCompose;
-  $('#search-toggle').onclick=()=>{searchOpen=!searchOpen;syncSearchPanel();if(searchOpen)$('#search').focus();};
   $('#settings').onclick=settings;
   $('#signout').onclick=()=>pb.authStore.clear();
   $('#nav-toggle').onclick=()=>setMobileNav(!$('#notification-nav').classList.contains('open'));
@@ -206,7 +201,7 @@ async function poll(manual=false) {
     $('#connection').textContent='● Connected · automatic updates';$('#connection').classList.remove('offline');
     updateAlerts();
     await loadList();
-    if(manual) report('Inbox is up to date. Fetching does not mark notifications read.');
+    if(manual){const box=$('#notice');if(box)box.hidden=true;}
   } catch(error) {if(epoch!==sessionEpoch){if(!pb.authStore.isValid)report(friendly(error),true);return;}state.connected=false;$('#connection').textContent='○ Connection interrupted · retrying';$('#connection').classList.add('offline');if(manual)report(friendly(error),true);}
   finally {if(epoch===sessionEpoch){pollBusy=false;if(pollAgain){pollAgain=false;scheduleRefresh(epoch);}}}
 }

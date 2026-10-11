@@ -54,7 +54,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
     if(holdRead && body?.action==='read')await readGate;
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
-  await page.goto('/');if(!restore){await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();}await expect(page.getByRole('heading',{name:'Inbox',exact:true})).toBeVisible();await expect(page.locator('#connection')).toContainText('Connected');
+  await page.goto('/');if(!restore){await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();}await expect(page.locator('#view-title')).toHaveText('Inbox');await expect(page.locator('#filter-label')).toHaveText('All');await expect(page.locator('#connection')).toContainText('Connected');
   return {writes,releaseRead,addNotification(){notes.unshift({...initial,id:'new000000000001',created:new Date().toISOString(),subject:'New update'});recipients.unshift({id:'newrec000000001',notification:'new000000000001',recipient:user,revision:1,read_at:'',acknowledged_at:'',archived_at:''});}};
 }
 test('safe Markdown detail and explicit recipient actions',async({page})=>{
@@ -158,7 +158,7 @@ test('persistent login and cross-tab logout discard late private responses',asyn
   await expect(page.locator('article')).toHaveCount(0);
   await page.unroute('**/api/context/query');
   await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();
-  await expect(peer.getByRole('heading',{name:'Inbox',exact:true})).toBeVisible();
+  await expect(peer.locator('#view-title')).toHaveText('Inbox');
 });
 
 test('cross-tab account replacement removes private detail and drafts',async({page,context})=>{
@@ -210,6 +210,7 @@ test('notification filters sit under the selected inbox, sent, or archived tab',
   await expect(page.getByRole('button',{name:'All notifications',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Unread',exact:true}).click();
   await expect(page).toHaveURL(/filter=unread/);
+  await expect(page.locator('#filter-label')).toHaveText('Unread');
   await expect(page.locator('.view-filters:not([hidden]) .view-filter.active')).toHaveText('Unread');
   await page.getByRole('button',{name:'Inbox',exact:false}).click();
   await expect(page.locator('#view-title')).toHaveText('Inbox');
