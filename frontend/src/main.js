@@ -4,7 +4,7 @@ import {updateTabIndicator} from './tab-indicator.js';
 import './style.css';
 
 const state = {view:'inbox', filter:'all', search:'', page:0, list:[], directory:[], statuses:[], preferences:null, latest:null, lastPoll:0, connected:false, selected:null};
-const filterOptions=[['all','All notifications'],['unread','Unread'],['awaiting','Awaiting acknowledgement'],['overdue','Past response deadline']];
+const filterOptions=[['unread','Unread'],['awaiting','Awaiting acknowledgement'],['overdue','Past response deadline']];
 function filterMenu(view){return `<div class="view-filters" data-for="${view}" hidden>${filterOptions.map(([value,label])=>`<button type="button" class="view-filter" data-filter="${value}">${label}</button>`).join('')}</div>`;}
 const pageSize=30;
 function routeState() {
@@ -24,6 +24,19 @@ function paintRoute() {
   $('#view-title').textContent=state.view==='sent'?'Sent':state.view==='archived'?'Archived':'Inbox';
   $('#search').value=state.search;
 }
+function setMobileNav(open) {
+  const nav=$('#notification-nav');
+  if(!nav)return;
+  nav.classList.toggle('open',open);
+  const backdrop=$('#nav-backdrop');
+  if(backdrop)backdrop.hidden=!open;
+  const toggle=$('#nav-toggle');
+  if(!toggle)return;
+  toggle.setAttribute('aria-expanded',String(open));
+  toggle.setAttribute('aria-label',open?'Close notifications menu':'Open notifications menu');
+}
+document.addEventListener('keydown',event=>{if(event.key==='Escape')setMobileNav(false);});
+window.matchMedia('(max-width:620px)').addEventListener('change',event=>{if(!event.matches)setMobileNav(false);});
 window.addEventListener('hashchange',()=>{if(!pb.authStore.isValid)return;Object.assign(state,routeState());paintRoute();void loadList().catch(error=>report(friendly(error),true));if(state.selected)void openDetail(state.selected);else{$('#detail').classList.remove('open');$('#detail').innerHTML='<p>Select a notification.</p>';}});
 
 let sessionEpoch=0;
@@ -93,15 +106,17 @@ function login() {
 async function start() {
   const epoch=sessionEpoch,current=pb.authStore.record;
   Object.assign(state,routeState());
-  $('#app').innerHTML=`<div class="workspace"><aside class="sidebar"><a href="#" class="brand"><span class="brand-mark">N</span><span>NotifyContext</span></a><button id="compose" class="primary compose"><span aria-hidden="true">＋</span> New notification</button><nav aria-label="Notifications"><button class="nav active" data-view="inbox">Inbox <span id="unread-count" class="count">0</span></button>${filterMenu('inbox')}<button class="nav" data-view="sent">Sent <span aria-hidden="true">↗</span></button>${filterMenu('sent')}<button class="nav" data-view="archived">Archived</button>${filterMenu('archived')}</nav><section class="toolbar" aria-label="Filter notifications"><label class="search"><span class="sr-only">Search notifications</span><input id="search" type="search" placeholder="Search subjects and messages"></label><button class="text-button" id="copy-search">Copy search link</button><button id="refresh" class="icon-button" aria-label="Refresh notifications">↻</button></section><div class="sidebar-bottom"><p id="connection" class="connection">Connecting…</p><button id="settings" class="profile"><span class="avatar">${e((current.name||'U').slice(0,1))}</span><span><strong>${e(current.name || 'Your account')}</strong><small id="my-status">Not set</small></span><span aria-hidden="true">⌄</span></button><button id="signout" class="text-button">Sign out</button></div></aside><main class="main"><header class="page-header"><div><p class="eyebrow">YOUR WORK, IN FOCUS</p><h1 id="view-title">Inbox</h1><p class="muted" id="view-description">Updates to read. Requests to move forward.</p></div><button id="alerts" class="secondary">Enable desktop alerts</button></header><div id="notice" class="notice" role="status" hidden></div><div class="content-grid"><section class="list-panel" aria-label="Notification list"><div id="list" aria-live="polite"></div><div class="pagination"><button class="text-button" id="previous">← Previous</button><span id="page-label"></span><button class="text-button" id="next">Next →</button></div></section><section id="detail" class="detail-panel" aria-label="Notification detail"><div class="empty detail-empty"><span class="empty-icon">↗</span><h2>A little context goes a long way.</h2><p>Select a notification to read the full message<br>and decide what happens next.</p></div></section></div></main></div><dialog id="dialog"></dialog>`;
+  $('#app').innerHTML=`<div class="workspace"><aside class="sidebar"><button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="notification-nav" aria-label="Open notifications menu"><span aria-hidden="true"></span></button><a href="#" class="brand"><span class="brand-mark">N</span><span>NotifyContext</span></a><button id="compose" class="primary compose"><span aria-hidden="true">＋</span> New notification</button><button id="nav-backdrop" class="nav-backdrop" type="button" aria-label="Dismiss notifications menu" hidden></button><nav id="notification-nav" aria-label="Notifications"><button class="nav active" data-view="inbox">Inbox <span id="unread-count" class="count">0</span></button>${filterMenu('inbox')}<button class="nav" data-view="sent">Sent <span aria-hidden="true">↗</span></button>${filterMenu('sent')}<button class="nav" data-view="archived">Archived</button>${filterMenu('archived')}</nav><section class="toolbar" aria-label="Filter notifications"><label class="search"><span class="sr-only">Search notifications</span><input id="search" type="search" placeholder="Search subjects and messages"></label><button class="text-button" id="copy-search">Copy search link</button><button id="refresh" class="icon-button" aria-label="Refresh notifications">↻</button></section><div class="sidebar-bottom"><p id="connection" class="connection">Connecting…</p><button id="settings" class="profile"><span class="avatar">${e((current.name||'U').slice(0,1))}</span><span><strong>${e(current.name || 'Your account')}</strong><small id="my-status">Not set</small></span><span aria-hidden="true">⌄</span></button><button id="signout" class="text-button">Sign out</button></div></aside><main class="main"><header class="page-header"><div><p class="eyebrow">YOUR WORK, IN FOCUS</p><h1 id="view-title">Inbox</h1><p class="muted" id="view-description">Updates to read. Requests to move forward.</p></div><button id="alerts" class="secondary">Enable desktop alerts</button></header><div id="notice" class="notice" role="status" hidden></div><div class="content-grid"><section class="list-panel" aria-label="Notification list"><div id="list" aria-live="polite"></div><div class="pagination"><button class="text-button" id="previous">← Previous</button><span id="page-label"></span><button class="text-button" id="next">Next →</button></div></section><section id="detail" class="detail-panel" aria-label="Notification detail"><div class="empty detail-empty"><span class="empty-icon">↗</span><h2>A little context goes a long way.</h2><p>Select a notification to read the full message<br>and decide what happens next.</p></div></section></div></main></div><dialog id="dialog"></dialog>`;
   paintRoute();
     $('#copy-search').onclick=()=>void navigator.clipboard.writeText(new URL(routeHref(null),location.href).href).then(()=>report('Search link copied.')).catch(()=>report('Unable to copy link.',true));
   $('#compose').onclick=compose;
   $('#settings').onclick=settings;
   $('#signout').onclick=()=>pb.authStore.clear();
-  all('[data-view]').forEach(button=>button.onclick=()=>{state.view=button.dataset.view;state.page=0;state.selected=null;paintRoute();$('#view-description').textContent=state.view==='sent'?'Handoffs you’ve shared. Responses you’re waiting for.':state.view==='archived'?'Handled and saved for later.':'Updates to read. Requests to move forward.';$('#detail').classList.remove('open');$('#detail').innerHTML='<p>Select a notification.</p>';saveRoute();void loadList().catch(error=>report(friendly(error),true));});
+  $('#nav-toggle').onclick=()=>setMobileNav(!$('#notification-nav').classList.contains('open'));
+  $('#nav-backdrop').onclick=()=>setMobileNav(false);
+  all('[data-view]').forEach(button=>button.onclick=()=>{state.view=button.dataset.view;state.filter='all';state.page=0;state.selected=null;paintRoute();$('#view-description').textContent=state.view==='sent'?'Handoffs you’ve shared. Responses you’re waiting for.':state.view==='archived'?'Handled and saved for later.':'Updates to read. Requests to move forward.';$('#detail').classList.remove('open');$('#detail').innerHTML='<p>Select a notification.</p>';saveRoute();void loadList().catch(error=>report(friendly(error),true));});
   $('#search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.search=$('#search').value;state.page=0;saveRoute(true);void loadList().catch(error=>report(friendly(error),true));},250);};
-  all('.view-filter').forEach(button=>button.onclick=()=>{state.filter=button.dataset.filter;state.page=0;paintRoute();saveRoute();void loadList().catch(error=>report(friendly(error),true));});
+  all('.view-filter').forEach(button=>button.onclick=()=>{state.filter=button.dataset.filter;state.page=0;paintRoute();saveRoute();setMobileNav(false);void loadList().catch(error=>report(friendly(error),true));});
   $('#previous').onclick=()=>{state.page=Math.max(0,state.page-1);saveRoute();void loadList().catch(error=>report(friendly(error),true));};
   $('#next').onclick=()=>{state.page++;saveRoute();void loadList().catch(error=>report(friendly(error),true));};
   $('#refresh').onclick=()=>poll(true);

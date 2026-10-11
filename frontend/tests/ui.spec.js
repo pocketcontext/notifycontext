@@ -207,18 +207,41 @@ test('a delayed refresh cannot restore a session after cross-tab logout',async({
 test('notification filters sit under the selected inbox, sent, or archived tab',async({page})=>{
   await setup(page);
   await expect(page.locator('#filter')).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'All notifications',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'All notifications',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Unread',exact:true}).click();
   await expect(page).toHaveURL(/filter=unread/);
   await expect(page.locator('.view-filters:not([hidden]) .view-filter.active')).toHaveText('Unread');
+  await page.getByRole('button',{name:'Inbox',exact:false}).click();
+  await expect(page.locator('#view-title')).toHaveText('Inbox');
+  await expect(page).not.toHaveURL(/filter=/);
+  await expect(page.locator('.view-filters:not([hidden]) .view-filter.active')).toHaveCount(0);
   await page.getByRole('button',{name:'Sent',exact:false}).click();
   await expect(page.locator('#view-title')).toHaveText('Sent');
-  await expect(page.getByRole('button',{name:'Past response deadline',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Past response deadline',exact:true}).click();
   await expect(page).toHaveURL(/view=sent/);
+  await expect(page).not.toHaveURL(/filter=/);
+  await page.getByRole('button',{name:'Past response deadline',exact:true}).click();
   await expect(page).toHaveURL(/filter=overdue/);
   await expect(page.locator('.view-filters:not([hidden])')).toHaveAttribute('data-for','sent');
   await expect(page.getByRole('button',{name:'Unread',exact:true})).toHaveCount(1);
+});
+test('mobile inbox, sent, and archived collapse into a left menu',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await setup(page);
+  await expect(page.getByRole('button',{name:'Sent',exact:false})).toHaveCount(0);
+  await page.getByRole('button',{name:'Open notifications menu',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Close notifications menu',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Sent',exact:false})).toBeVisible();
+  await page.getByRole('button',{name:'Unread',exact:true}).click();
+  await expect(page).toHaveURL(/filter=unread/);
+  await expect(page.getByRole('button',{name:'Sent',exact:false})).toHaveCount(0);
+  await page.getByRole('button',{name:'Open notifications menu',exact:true}).click();
+  await page.getByRole('button',{name:'Inbox',exact:false}).click();
+  await expect(page.locator('#view-title')).toHaveText('Inbox');
+  await expect(page).not.toHaveURL(/filter=/);
+  await expect(page.locator('.view-filters:not([hidden]) .view-filter.active')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Sent',exact:false})).toBeVisible();
+  await page.getByRole('button',{name:'Close notifications menu',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Sent',exact:false})).toHaveCount(0);
 });
 
 test('tab count preserves explicit actions, ignores filters, and resets on logout',async({page})=>{

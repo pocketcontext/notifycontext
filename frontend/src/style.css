@@ -9,4 +9,22 @@
 
 .sidebar .toolbar{display:flex;flex-direction:column;align-items:stretch;padding:16px 0;gap:10px}.sidebar .toolbar input,.sidebar .toolbar select{width:100%;min-width:0}.sidebar .toolbar .search{min-width:0}
 .view-filters{display:flex;flex-direction:column;gap:2px;margin:0 0 8px 10px}.view-filters[hidden]{display:none}.view-filter{display:block;width:100%;background:none;text-align:left;border-radius:7px;padding:8px 12px;margin:0;color:#697c70;font-size:13px;font-weight:500}.view-filter.active{background:#dfe9dc;color:#294d3b;font-weight:600}.view-filter:hover{background:#e7ede2}
-@media(max-width:620px){.sidebar nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}.sidebar nav>.nav[data-view="inbox"]{grid-column:1;grid-row:1}.sidebar nav>.nav[data-view="sent"]{grid-column:2;grid-row:1}.sidebar nav>.nav[data-view="archived"]{grid-column:3;grid-row:1}.sidebar nav>.view-filters{grid-column:1/-1;grid-row:2;margin:4px 0 8px}.view-filter{font-size:12px;padding:8px 10px}}
+.nav-toggle,.nav-backdrop{display:none}
+@media(max-width:620px){
+.sidebar{grid-template-columns:auto 1fr auto}
+.nav-toggle{display:inline-grid;place-items:center;position:relative;z-index:8;width:36px;height:34px;padding:0;border:1px solid var(--border);border-radius:7px;background:#fff;color:#294d3b}
+.nav-toggle span,.nav-toggle span:before,.nav-toggle span:after{display:block;width:16px;height:2px;background:currentColor;border-radius:1px}
+.nav-toggle span{position:relative}
+.nav-toggle span:before,.nav-toggle span:after{content:'';position:absolute;left:0}
+.nav-toggle span:before{top:-5px}
+.nav-toggle span:after{top:5px}
+.nav-toggle[aria-expanded="true"] span{background:transparent}
+.nav-toggle[aria-expanded="true"] span:before{top:0;transform:rotate(45deg)}
+.nav-toggle[aria-expanded="true"] span:after{top:0;transform:rotate(-45deg)}
+.sidebar nav{display:none;position:fixed;z-index:7;top:66px;left:0;bottom:0;width:min(280px,86vw);margin:0;padding:12px 14px 18px;background:#f0f3ec;border-right:1px solid var(--border);overflow:auto;box-shadow:8px 0 30px #203a3024;flex-direction:column;align-items:stretch}
+.sidebar nav.open{display:flex}
+.sidebar nav .nav{width:100%;flex:none;justify-content:space-between;font-size:14px;padding:12px 14px}
+.nav-backdrop[hidden]{display:none}
+.nav-backdrop:not([hidden]){display:block;position:fixed;top:66px;right:0;bottom:0;left:0;z-index:6;background:#1d382d33;padding:0}
+.view-filter{font-size:12px;padding:8px 10px}
+}
