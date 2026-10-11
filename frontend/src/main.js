@@ -4,6 +4,7 @@ import {updateTabIndicator} from './tab-indicator.js';
 import './style.css';
 
 const state = {view:'inbox', filter:'all', search:'', page:0, list:[], directory:[], statuses:[], preferences:null, latest:null, lastPoll:0, connected:false, selected:null};
+let searchOpen=false;
 const filterOptions=[['unread','Unread'],['awaiting','Awaiting acknowledgement'],['overdue','Past response deadline']];
 function filterMenu(view){return `<div class="view-filters" data-for="${view}" hidden>${filterOptions.map(([value,label])=>`<button type="button" class="view-filter" data-filter="${value}">${label}</button>`).join('')}</div>`;}
 const pageSize=30;
@@ -21,12 +22,24 @@ function paintRoute() {
   all('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));
   all('.view-filters').forEach(menu=>{menu.hidden=menu.dataset.for!==state.view;});
   all('.view-filter').forEach(button=>button.classList.toggle('active',button.dataset.filter===state.filter));
-  $('#view-title').textContent=state.view==='sent'?'Sent':state.view==='archived'?'Archived':'Inbox';
-  $('#search').value=state.search;
+  const title=$('#view-title');if(title)title.textContent=state.view==='sent'?'Sent':state.view==='archived'?'Archived':'Inbox';
+  const search=$('#search');if(search)search.value=state.search;
+  if(state.search)searchOpen=true;
+  syncSearchPanel();
+}
+function barHeight(){const bar=$('.app-bar');if(bar)document.documentElement.style.setProperty('--bar-height',`${bar.offsetHeight}px`);}
+function syncSearchPanel(){
+  const panel=$('#search-panel'),toggle=$('#search-toggle');
+  if(!panel)return;
+  const compact=window.matchMedia('(max-width:900px)').matches;
+  panel.hidden=compact && !searchOpen;
+  if(toggle)toggle.setAttribute('aria-expanded',String(compact && searchOpen));
+  barHeight();
 }
 function setMobileNav(open) {
   const nav=$('#notification-nav');
   if(!nav)return;
+  if(open)barHeight();
   nav.classList.toggle('open',open);
   const backdrop=$('#nav-backdrop');
   if(backdrop)backdrop.hidden=!open;
@@ -35,9 +48,14 @@ function setMobileNav(open) {
   toggle.setAttribute('aria-expanded',String(open));
   toggle.setAttribute('aria-label',open?'Close notifications menu':'Open notifications menu');
 }
-document.addEventListener('keydown',event=>{if(event.key==='Escape')setMobileNav(false);});
-window.matchMedia('(max-width:620px)').addEventListener('change',event=>{if(!event.matches)setMobileNav(false);});
-window.addEventListener('hashchange',()=>{if(!pb.authStore.isValid)return;Object.assign(state,routeState());paintRoute();void loadList().catch(error=>report(friendly(error),true));if(state.selected)void openDetail(state.selected);else{$('#detail').classList.remove('open');$('#detail').innerHTML='<p>Select a notification.</p>';}});
+function showList(){const panel=$('#detail');if(!panel)return;panel.classList.remove('open');panel.innerHTML='<p class="detail-placeholder">Select a notification.</p>';}
+document.addEventListener('keydown',event=>{
+  if(event.key!=='Escape' || event.target?.closest?.('dialog'))return;
+  if($('#notification-nav')?.classList.contains('open')){setMobileNav(false);return;}
+  if(searchOpen && window.matchMedia('(max-width:900px)').matches){searchOpen=false;syncSearchPanel();}
+},true);
+window.matchMedia('(max-width:900px)').addEventListener('change',event=>{if(!event.matches)setMobileNav(false);syncSearchPanel();});
+window.addEventListener('hashchange',()=>{if(!pb.authStore.isValid)return;Object.assign(state,routeState());paintRoute();void loadList().catch(error=>report(friendly(error),true));if(state.selected)void openDetail(state.selected);else showList();});
 
 let sessionEpoch=0;
 const parseDate=value=>new Date(String(value).replace(' ','T'));
@@ -98,7 +116,7 @@ async function pageAll(table, where='', order='id') {
   for(let offset=0;;offset+=200){const batch=await query(`SELECT * FROM ${table} ${where} ORDER BY ${order} LIMIT 200 OFFSET ${offset}`);result.push(...batch);if(batch.length<200) return result;}
 }
 function login() {
-  clearInterval(timer);clearTimeout(searchTimer);clearTimeout(realtimeTimer);sessionEpoch++;listGeneration++;pollBusy=false;pollAgain=false;realtimeStarted=false;realtimeGeneration++;updateTabIndicator(0);Object.assign(state,{view:'inbox',filter:'all',search:'',page:0,list:[],directory:[],statuses:[],preferences:null,latest:null,lastPoll:0,connected:false,selected:null,pendingAlerts:new Map()});
+  clearInterval(timer);clearTimeout(searchTimer);clearTimeout(realtimeTimer);sessionEpoch++;listGeneration++;pollBusy=false;pollAgain=false;realtimeStarted=false;realtimeGeneration++;updateTabIndicator(0);searchOpen=false;Object.assign(state,{view:'inbox',filter:'all',search:'',page:0,list:[],directory:[],statuses:[],preferences:null,latest:null,lastPoll:0,connected:false,selected:null,pendingAlerts:new Map()});
   $('#app').innerHTML=`<main class="login"><div class="brand"><span class="brand-mark">N</span> NotifyContext</div><section class="login-card"><p class="eyebrow">KEEP WORK MOVING</p><h1>A clear place for<br>your next handoff.</h1><p class="muted">Updates, requests and acknowledgements.<br>For every kind of work.</p><button class="primary wide" id="google">Continue with Google</button><p class="fine">Use your organization's Google Workspace account.</p><details><summary>Local test sign-in</summary><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="secondary wide">Sign in</button></form></details><div id="notice" class="notice" role="status" hidden></div></section><p class="login-foot">Your attention, thoughtfully organized.</p></main>`;
   $('#google').onclick=async()=>{try {await signIn(null,null,true);}catch(error){report(friendly(error),true);}};
   $('#login-form').onsubmit=async event=>{event.preventDefault(); const data=new FormData(event.target);try {await signIn(data.get('email'),data.get('password'));}catch(error){report(friendly(error),true);}};
@@ -106,15 +124,20 @@ function login() {
 async function start() {
   const epoch=sessionEpoch,current=pb.authStore.record;
   Object.assign(state,routeState());
-  $('#app').innerHTML=`<div class="workspace"><aside class="sidebar"><button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="notification-nav" aria-label="Open notifications menu"><span aria-hidden="true"></span></button><a href="#" class="brand"><span class="brand-mark">N</span><span>NotifyContext</span></a><button id="compose" class="primary compose"><span aria-hidden="true">＋</span> New notification</button><button id="nav-backdrop" class="nav-backdrop" type="button" aria-label="Dismiss notifications menu" hidden></button><nav id="notification-nav" aria-label="Notifications"><button class="nav active" data-view="inbox">Inbox <span id="unread-count" class="count">0</span></button>${filterMenu('inbox')}<button class="nav" data-view="sent">Sent <span aria-hidden="true">↗</span></button>${filterMenu('sent')}<button class="nav" data-view="archived">Archived</button>${filterMenu('archived')}</nav><section class="toolbar" aria-label="Filter notifications"><label class="search"><span class="sr-only">Search notifications</span><input id="search" type="search" placeholder="Search subjects and messages"></label><button class="text-button" id="copy-search">Copy search link</button><button id="refresh" class="icon-button" aria-label="Refresh notifications">↻</button></section><div class="sidebar-bottom"><p id="connection" class="connection">Connecting…</p><button id="settings" class="profile"><span class="avatar">${e((current.name||'U').slice(0,1))}</span><span><strong>${e(current.name || 'Your account')}</strong><small id="my-status">Not set</small></span><span aria-hidden="true">⌄</span></button><button id="signout" class="text-button">Sign out</button></div></aside><main class="main"><header class="page-header"><div><p class="eyebrow">YOUR WORK, IN FOCUS</p><h1 id="view-title">Inbox</h1><p class="muted" id="view-description">Updates to read. Requests to move forward.</p></div><button id="alerts" class="secondary">Enable desktop alerts</button></header><div id="notice" class="notice" role="status" hidden></div><div class="content-grid"><section class="list-panel" aria-label="Notification list"><div id="list" aria-live="polite"></div><div class="pagination"><button class="text-button" id="previous">← Previous</button><span id="page-label"></span><button class="text-button" id="next">Next →</button></div></section><section id="detail" class="detail-panel" aria-label="Notification detail"><div class="empty detail-empty"><span class="empty-icon">↗</span><h2>A little context goes a long way.</h2><p>Select a notification to read the full message<br>and decide what happens next.</p></div></section></div></main></div><dialog id="dialog"></dialog>`;
+  if(state.search)searchOpen=true;
+  const compact=window.matchMedia('(max-width:900px)').matches;
+  $('#app').innerHTML=`<div class="workspace"><aside class="sidebar"><a href="#" class="brand"><span class="brand-mark">N</span><span>NotifyContext</span></a><button id="compose" class="primary compose"><span aria-hidden="true">＋</span> New notification</button><button id="nav-backdrop" class="nav-backdrop" type="button" aria-label="Dismiss notifications menu" hidden></button><nav id="notification-nav" aria-label="Notifications"><button class="nav active" data-view="inbox">Inbox <span id="unread-count" class="count">0</span></button>${filterMenu('inbox')}<button class="nav" data-view="sent">Sent <span aria-hidden="true">↗</span></button>${filterMenu('sent')}<button class="nav" data-view="archived">Archived</button>${filterMenu('archived')}<div class="sidebar-bottom"><p id="connection" class="connection">Connecting…</p><button id="settings" class="profile"><span class="avatar">${e((current.name||'U').slice(0,1))}</span><span><strong>${e(current.name || 'Your account')}</strong><small id="my-status">Not set</small></span><span aria-hidden="true">⌄</span></button><button id="signout" class="text-button">Sign out</button><button id="alerts" class="secondary alerts-control">Enable desktop alerts</button></div></nav></aside><main class="main"><header class="app-bar"><button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="notification-nav" aria-label="Open notifications menu"><span aria-hidden="true"></span></button><h1 id="view-title">Inbox</h1><button id="search-toggle" class="icon-button search-toggle" type="button" aria-expanded="false" aria-controls="search-panel" aria-label="Search notifications"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg></button><div id="search-panel" class="search-panel"${compact && !searchOpen ? ' hidden' : ''}><label class="search-field"><span class="sr-only">Search notifications</span><input id="search" type="search" placeholder="Search subjects and messages"></label><button id="copy-search" class="search-copy" type="button" aria-label="Copy search link" title="Copy search link"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 5"></path><path d="M14 11a5 5 0 0 0-7.07 0L5.5 12.43a5 5 0 0 0 7.07 7.07L14 18"></path></svg></button></div><button id="refresh" class="icon-button" aria-label="Refresh notifications">↻</button><button id="compose-bar" class="primary compose bar-compose" type="button" aria-label="New notification"><span aria-hidden="true">＋</span></button></header><div id="notice" class="notice" role="status" hidden></div><div class="content-grid"><section class="list-panel" aria-label="Notification list"><div id="list" aria-live="polite"></div><div class="pagination" id="pagination" hidden><button class="text-button" id="previous">← Previous</button><span id="page-label"></span><button class="text-button" id="next">Next →</button></div></section><section id="detail" class="detail-panel" aria-label="Notification detail"><p class="detail-placeholder">Select a notification.</p></section></div></main></div><dialog id="dialog"></dialog>`;
   paintRoute();
     $('#copy-search').onclick=()=>void navigator.clipboard.writeText(new URL(routeHref(null),location.href).href).then(()=>report('Search link copied.')).catch(()=>report('Unable to copy link.',true));
-  $('#compose').onclick=compose;
+  const openCompose=()=>{setMobileNav(false);compose();};
+  $('#compose').onclick=openCompose;
+  $('#compose-bar').onclick=openCompose;
+  $('#search-toggle').onclick=()=>{searchOpen=!searchOpen;syncSearchPanel();if(searchOpen)$('#search').focus();};
   $('#settings').onclick=settings;
   $('#signout').onclick=()=>pb.authStore.clear();
   $('#nav-toggle').onclick=()=>setMobileNav(!$('#notification-nav').classList.contains('open'));
   $('#nav-backdrop').onclick=()=>setMobileNav(false);
-  all('[data-view]').forEach(button=>button.onclick=()=>{state.view=button.dataset.view;state.filter='all';state.page=0;state.selected=null;paintRoute();$('#view-description').textContent=state.view==='sent'?'Handoffs you’ve shared. Responses you’re waiting for.':state.view==='archived'?'Handled and saved for later.':'Updates to read. Requests to move forward.';$('#detail').classList.remove('open');$('#detail').innerHTML='<p>Select a notification.</p>';saveRoute();void loadList().catch(error=>report(friendly(error),true));});
+  all('[data-view]').forEach(button=>button.onclick=()=>{state.view=button.dataset.view;state.filter='all';state.page=0;state.selected=null;paintRoute();showList();saveRoute();void loadList().catch(error=>report(friendly(error),true));});
   $('#search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.search=$('#search').value;state.page=0;saveRoute(true);void loadList().catch(error=>report(friendly(error),true));},250);};
   all('.view-filter').forEach(button=>button.onclick=()=>{state.filter=button.dataset.filter;state.page=0;paintRoute();saveRoute();setMobileNav(false);void loadList().catch(error=>report(friendly(error),true));});
   $('#previous').onclick=()=>{state.page=Math.max(0,state.page-1);saveRoute();void loadList().catch(error=>report(friendly(error),true));};
@@ -151,7 +174,9 @@ async function loadList() {
   const batch=await query(listSql());
   if(generation!==listGeneration || epoch!==sessionEpoch)return;
   state.list=batch.slice(0,pageSize);
-  $('#previous').disabled=state.page===0;$('#next').disabled=batch.length<=pageSize;$('#page-label').textContent=`Page ${state.page+1}`;
+  const hasMore=batch.length>pageSize,pager=$('#pagination');
+  if(pager)pager.hidden=state.page===0 && !hasMore;
+  $('#previous').disabled=state.page===0;$('#next').disabled=!hasMore;$('#page-label').textContent=`Page ${state.page+1}`;
   $('#list').innerHTML=state.list.length?state.list.map(item=>`<button class="notification-row ${!item.read_at && state.view!=='sent'?'unread':''} ${state.selected===item.id?'selected':''}" data-id="${e(item.id)}"><div class="row-top"><span class="sender">${e(name(item.sender))}</span><time>${e(date(item.created))}</time></div><h2>${e(item.subject)}</h2><p class="excerpt">${e(item.body_markdown.slice(0,140))}</p><div class="row-bottom"><span class="badge ${e(item.kind)}">${e(kindLabel(item.kind))}</span>${item.withdrawn_at?'<span class="state-label">Withdrawn</span>':item.acknowledged_at?'<span class="state-label">✓ Acknowledged</span>':item.ack_required?'<span class="state-label">Acknowledgement requested</span>':''}</div></button>`).join(''):`<div class="empty"><span class="empty-icon">✓</span><h2>${state.search || state.filter!=='all'?'No matching notifications':'You’re all caught up'}</h2><p>${state.search || state.filter!=='all'?'Try another search or filter.':'New updates and requests will appear here.'}</p></div>`;
   all('.notification-row').forEach(button=>button.onclick=()=>openDetail(button.dataset.id));
 }
