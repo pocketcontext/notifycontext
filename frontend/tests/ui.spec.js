@@ -204,6 +204,23 @@ test('a delayed refresh cannot restore a session after cross-tab logout',async({
 });
 
 
+test('notification filters sit under the selected inbox, sent, or archived tab',async({page})=>{
+  await setup(page);
+  await expect(page.locator('#filter')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'All notifications',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Unread',exact:true}).click();
+  await expect(page).toHaveURL(/filter=unread/);
+  await expect(page.locator('.view-filters:not([hidden]) .view-filter.active')).toHaveText('Unread');
+  await page.getByRole('button',{name:'Sent',exact:false}).click();
+  await expect(page.locator('#view-title')).toHaveText('Sent');
+  await expect(page.getByRole('button',{name:'Past response deadline',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Past response deadline',exact:true}).click();
+  await expect(page).toHaveURL(/view=sent/);
+  await expect(page).toHaveURL(/filter=overdue/);
+  await expect(page.locator('.view-filters:not([hidden])')).toHaveAttribute('data-for','sent');
+  await expect(page.getByRole('button',{name:'Unread',exact:true})).toHaveCount(1);
+});
+
 test('tab count preserves explicit actions, ignores filters, and resets on logout',async({page})=>{
   await setup(page,{count:101});await expect(page).toHaveTitle('(101) NotifyContext');
   const favicon=page.locator('link[rel="icon"]');await expect(favicon).toHaveAttribute('href',/99%2B/);
