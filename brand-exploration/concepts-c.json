@@ -1,0 +1,233 @@
+[
+  {
+    "id": 68,
+    "name": "Note bookmark",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Note bookmark uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M29 22H101V106H29Z M49 22V56L61 47 73 56V22 M47 79H84 M47 94H74\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 69,
+    "name": "Context bubble",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Context bubble uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M25 32Q25 21 36 21H91Q104 21 104 34V79Q104 91 92 91H62L38 109V91H36Q25 91 25 80Z M44 45H85 M44 64H73\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 70,
+    "name": "Signal stamp",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Signal stamp uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M21 31 33 24 45 31 57 24 69 31 81 24 93 31 105 24V99L93 106 81 99 69 106 57 99 45 106 33 99 21 106Z M42 52H84 M42 72H72\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 71,
+    "name": "Queue cards",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Queue cards uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<rect x=\"24\" y=\"25\" width=\"80\" height=\"22\" rx=\"7\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"7\"/><rect x=\"24\" y=\"61\" width=\"80\" height=\"22\" rx=\"7\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"7\"/><path d=\"M32 99H96\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 72,
+    "name": "Stepped rhythm",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Stepped rhythm uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<rect x=\"22\" y=\"72\" width=\"20\" height=\"34\" rx=\"5\" fill=\"currentColor\"/><rect x=\"54\" y=\"47\" width=\"20\" height=\"59\" rx=\"5\" fill=\"currentColor\"/><rect x=\"86\" y=\"22\" width=\"20\" height=\"84\" rx=\"5\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 73,
+    "name": "Triage lanes",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Triage lanes uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M24 24V104 M52 24V104 M80 24V104 M108 24V104\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"18\" y=\"35\" width=\"18\" height=\"19\" rx=\"5\" fill=\"currentColor\"/><rect x=\"46\" y=\"74\" width=\"18\" height=\"19\" rx=\"5\" fill=\"currentColor\"/><rect x=\"74\" y=\"51\" width=\"18\" height=\"19\" rx=\"5\" fill=\"currentColor\"/><rect x=\"102\" y=\"27\" width=\"12\" height=\"19\" rx=\"5\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 74,
+    "name": "Ordered dots",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Ordered dots uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"30\" cy=\"29\" r=\"9\" fill=\"currentColor\"/><circle cx=\"30\" cy=\"64\" r=\"9\" fill=\"currentColor\"/><circle cx=\"30\" cy=\"99\" r=\"9\" fill=\"currentColor\"/><path d=\"M52 29H104 M52 64H85 M52 99H70\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 75,
+    "name": "Queue pocket",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Queue pocket uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M26 45H102V105H26Z M38 31H90 M50 17H78 M26 71H48L55 82H73L80 71H102\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 76,
+    "name": "Gentle cadence",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Gentle cadence uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M20 85V48Q20 31 37 31Q54 31 54 48V85 M74 85V48Q74 31 91 31Q108 31 108 48V85 M20 103H108\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 77,
+    "name": "Time to notice",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Time to notice uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"64\" r=\"42\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\"/><path d=\"M64 37V65L83 77\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"97\" cy=\"29\" r=\"10\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 78,
+    "name": "Review stack",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Review stack uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M25 30 64 18 103 30 64 44Z M25 52 64 66 103 52 M25 76 64 90 103 76 M25 99 64 111 103 99\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 79,
+    "name": "Marked row",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Marked row uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M52 28H105 M52 64H105 M52 100H87 M20 61 29 70 43 53\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"29\" cy=\"28\" r=\"6\" fill=\"currentColor\"/><circle cx=\"29\" cy=\"100\" r=\"6\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 80,
+    "name": "Crescent pause",
+    "family": "Backlog & rhythm",
+    "description": "A composed queue makes room for deliberate attention. Crescent pause uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M85 23A43 43 0 1 0 105 81 M84 23Q52 64 105 81 M93 25V48 M108 25V48\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 81,
+    "name": "Bridge N",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. Bridge N uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M23 105V23H43L85 77V23H105V105H85L43 51V105Z\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 82,
+    "name": "Ribbon N",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. Ribbon N uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M26 104V27H43L85 101H102V24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"12\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 83,
+    "name": "Notched N",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. Notched N uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 104V24H43V104Z M85 24H106V104H85Z M49 24H67L80 47V81L49 40Z M48 48 80 100H61L48 78Z\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 84,
+    "name": "Signal N",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. Signal N uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M25 104V48L51 74 76 49V104 M76 30Q96 30 96 50 M77 16Q110 16 110 50\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 85,
+    "name": "Joined N",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. Joined N uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M25 103V25L103 103V25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"13\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"25\" cy=\"25\" r=\"10\" fill=\"currentColor\"/><circle cx=\"103\" cy=\"103\" r=\"10\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 86,
+    "name": "Rounded N",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. Rounded N uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M27 100V38Q27 16 43 39L85 94Q101 114 101 91V26\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"14\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 87,
+    "name": "Crossbar N",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. Crossbar N uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 25H43V103H22Z M85 25H106V103H85Z M45 26 83 65V100L45 60Z\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 88,
+    "name": "Folded signal",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. Folded signal uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M24 101V27L64 65 104 27V101 M24 101 64 65 104 101\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 89,
+    "name": "Negative N",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. Negative N uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M20 22H53L82 72V22H108V106H77L46 53V106H20Z\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 90,
+    "name": "N in motion",
+    "family": "Abstract N",
+    "description": "Angular and folded constructions build a distinctive initial. N in motion uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 101V42 M22 23 105 105 M105 24V82\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"14\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"22\" cy=\"23\" r=\"7\" fill=\"currentColor\"/><circle cx=\"105\" cy=\"105\" r=\"7\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 91,
+    "name": "Presence orbit",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Presence orbit uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"64\" r=\"38\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"9\"/><circle cx=\"94\" cy=\"28\" r=\"12\" fill=\"currentColor\"/><circle cx=\"64\" cy=\"64\" r=\"9\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 92,
+    "name": "Notice lozenge",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Notice lozenge uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M37 24H91L107 64 91 104H37L21 64Z M46 64H82 M64 46V82\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 93,
+    "name": "Open presence",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Open presence uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M45 25Q23 36 23 64Q23 92 45 103 M83 25Q105 36 105 64Q105 92 83 103\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"64\" r=\"17\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 94,
+    "name": "Attention portal",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Attention portal uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M28 103V51Q28 23 64 23Q100 23 100 51V103 M44 103V59Q44 42 64 42Q84 42 84 59V103\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"76\" r=\"7\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 95,
+    "name": "Signal shield",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Signal shield uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M26 30 64 18 102 30V64Q102 91 64 110Q26 91 26 64Z M45 61 59 75 85 48\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 96,
+    "name": "Colleague knot",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Colleague knot uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M45 41 29 57Q13 73 29 89Q45 105 61 89L79 71 M83 87 99 71Q115 55 99 39Q83 23 67 39L49 57 M49 79 79 49\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 97,
+    "name": "Four arrivals",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Four arrivals uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 22H54V43H43V54H22Z M74 22H106V54H85V43H74Z M22 74H43V85H54V106H22Z M85 74H106V106H74V85H85Z\" fill=\"currentColor\"/><circle cx=\"64\" cy=\"64\" r=\"9\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 98,
+    "name": "Notice compass",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Notice compass uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M64 18V37 M64 91V110 M18 64H37 M91 64H110 M44 44 84 44 84 84 44 84Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"64\" r=\"7\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 99,
+    "name": "Gathered petals",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Gathered petals uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M64 64Q14 64 24 31Q57 21 64 64Q64 14 97 24Q107 57 64 64Q114 64 104 97Q71 107 64 64Q64 114 31 104Q21 71 64 64\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 100,
+    "name": "Human signal",
+    "family": "Emblems & presence",
+    "description": "Compact emblems give colleague attention a recognizable home. Human signal uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"28\" r=\"11\" fill=\"currentColor\"/><path d=\"M25 58 64 47 103 58 M64 47V79 M43 105 64 79 85 105\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  }
+]

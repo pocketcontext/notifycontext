@@ -1,0 +1,233 @@
+[
+  {
+    "id": 35,
+    "name": "Double received",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Double received uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M20 63 39 82 75 43 M57 73 68 84 108 44\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"11\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 36,
+    "name": "Acknowledged card",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Acknowledged card uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M25 20H89L104 35V106H25Z M87 21V38H104 M44 64 58 79 84 53\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 37,
+    "name": "Returned signal",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Returned signal uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M47 27 23 49 47 70 M24 49H73Q102 49 102 79Q102 104 79 104 M53 85 64 96 85 75\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 38,
+    "name": "Tick aperture",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Tick aperture uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M43 23H23V43 M85 23H105V43 M23 85V105H43 M105 85V105H85 M40 62 57 79 90 44\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 39,
+    "name": "Received ribbon",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Received ribbon uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M32 22H96V105L64 88 32 105Z M47 53 60 67 83 42\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 40,
+    "name": "Handshake signal",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Handshake signal uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M19 58 41 36 63 46 87 35 109 57 80 96 63 86 48 96 20 68 M44 59 61 43 M57 67 81 90 M69 57 93 77\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 41,
+    "name": "One to one",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. One to one uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"31\" cy=\"34\" r=\"12\" fill=\"currentColor\"/><circle cx=\"97\" cy=\"94\" r=\"12\" fill=\"currentColor\"/><path d=\"M31 55V75Q31 94 51 94H72 M58 80 72 94 58 108\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 42,
+    "name": "Directed circle",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. Directed circle uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"24\" r=\"10\" fill=\"currentColor\"/><circle cx=\"27\" cy=\"93\" r=\"10\" fill=\"currentColor\"/><circle cx=\"101\" cy=\"93\" r=\"10\" fill=\"currentColor\"/><path d=\"M55 43 37 76 M75 43 94 76 M46 93H83\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 43,
+    "name": "Team notice",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. Team notice uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"38\" r=\"13\" fill=\"currentColor\"/><circle cx=\"27\" cy=\"55\" r=\"9\" fill=\"currentColor\"/><circle cx=\"101\" cy=\"55\" r=\"9\" fill=\"currentColor\"/><path d=\"M42 100V81Q42 64 64 64Q86 64 86 81V100 M17 97V82Q17 70 31 70 M111 97V82Q111 70 97 70\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 44,
+    "name": "Broadcast tree",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. Broadcast tree uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"28\" r=\"11\" fill=\"currentColor\"/><circle cx=\"25\" cy=\"99\" r=\"9\" fill=\"currentColor\"/><circle cx=\"64\" cy=\"99\" r=\"9\" fill=\"currentColor\"/><circle cx=\"103\" cy=\"99\" r=\"9\" fill=\"currentColor\"/><path d=\"M64 42V66 M25 86V66H103V86 M64 66V86\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 45,
+    "name": "Chosen recipient",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. Chosen recipient uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"33\" cy=\"35\" r=\"12\" fill=\"currentColor\"/><path d=\"M17 81V66Q17 52 33 52Q49 52 49 66V81 M63 39H104 M89 24 104 39 89 54 M66 83 78 95 103 70\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 46,
+    "name": "Direct handoff",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. Direct handoff uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M21 31H65V65H21Z M64 65H107V100H64Z M65 45H89V64 M43 65V82H63\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 47,
+    "name": "Shared attention",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. Shared attention uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"42\" cy=\"43\" r=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\"/><circle cx=\"86\" cy=\"43\" r=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\"/><path d=\"M17 101V87Q17 66 42 66Q67 66 67 87V101 M73 67Q110 63 110 89V101\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 48,
+    "name": "Relay nodes",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. Relay nodes uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"27\" cy=\"89\" r=\"10\" fill=\"currentColor\"/><circle cx=\"64\" cy=\"39\" r=\"10\" fill=\"currentColor\"/><circle cx=\"101\" cy=\"89\" r=\"10\" fill=\"currentColor\"/><path d=\"M34 73 55 52 M73 52 94 73 M44 91H84\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 49,
+    "name": "Recipient focus",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. Recipient focus uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"46\" r=\"13\" fill=\"currentColor\"/><path d=\"M40 88Q40 65 64 65Q88 65 88 88 M40 20H20V40 M88 20H108V40 M20 88V108H40 M108 88V108H88\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 50,
+    "name": "Two way notice",
+    "family": "Colleagues & routing",
+    "description": "Attention moves between people without losing its destination. Two way notice uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 42H99 M83 26 100 42 83 58 M106 87H29 M45 71 28 87 45 103\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 51,
+    "name": "Notice diamond",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Notice diamond uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M64 17 111 64 64 111 17 64Z M64 41V69\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"87\" r=\"5\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 52,
+    "name": "Attention spark",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Attention spark uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M64 15 76 49 111 64 76 78 64 113 51 78 17 64 51 49Z\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 53,
+    "name": "Priority flag",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Priority flag uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M30 107V21H98L81 44 98 67H30\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 54,
+    "name": "Priority stack",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Priority stack uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<rect x=\"24\" y=\"23\" width=\"57\" height=\"14\" rx=\"5\" fill=\"currentColor\"/><rect x=\"24\" y=\"56\" width=\"80\" height=\"14\" rx=\"5\" fill=\"currentColor\"/><rect x=\"24\" y=\"89\" width=\"40\" height=\"14\" rx=\"5\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 55,
+    "name": "Notice capsule",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Notice capsule uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<rect x=\"40\" y=\"19\" width=\"48\" height=\"90\" rx=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\"/><path d=\"M64 40V70\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"89\" r=\"6\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 56,
+    "name": "Attention brackets",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Attention brackets uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M44 23H23V105H44 M84 23H105V105H84 M64 40V68\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"86\" r=\"6\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 57,
+    "name": "Pinned priority",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Pinned priority uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M46 23H90L83 49 99 65H74V93L64 106 54 93V65H29L45 49Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 58,
+    "name": "Priority horizon",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Priority horizon uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M20 84H108 M64 23V59 M37 36 48 48 M91 36 80 48 M32 104H96\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"79\" r=\"9\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 59,
+    "name": "Bold asterisk",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Bold asterisk uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M64 23V105 M28 43 100 85 M28 85 100 43\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"12\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 60,
+    "name": "Notice beacon",
+    "family": "Priority & attention",
+    "description": "A small interruption earns a distinctive, balanced mark. Notice beacon uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M49 103 57 79V39H71V79L79 103Z M42 32Q23 48 42 65 M86 32Q105 48 86 65\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 61,
+    "name": "Corner note",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Corner note uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M23 23H105V83H61L33 105V83H23Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"47\" cy=\"54\" r=\"5\" fill=\"currentColor\"/><circle cx=\"64\" cy=\"54\" r=\"5\" fill=\"currentColor\"/><circle cx=\"81\" cy=\"54\" r=\"5\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 62,
+    "name": "Folded notice",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Folded notice uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M29 20H81L103 42V108H29Z M81 20V42H103 M45 62H85 M45 80H72\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 63,
+    "name": "Sealed signal",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Sealed signal uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M21 35H107V96H21Z M21 35 64 68 107 35 M21 96 49 69 M107 96 79 69\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 64,
+    "name": "Letter slot",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Letter slot uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<rect x=\"21\" y=\"25\" width=\"86\" height=\"78\" rx=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\"/><path d=\"M38 44H89 M38 63H75\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"88\" cy=\"88\" r=\"8\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 65,
+    "name": "Message pair",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Message pair uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M20 26H83V68H51L32 84V68H20Z M83 49H109V91H98V105L81 91H56V79\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 66,
+    "name": "Announcement fold",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Announcement fold uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 41H48L89 22V99L48 79H22Z M42 79 48 106H64L57 82 M104 45V76\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 67,
+    "name": "Paper plane",
+    "family": "Messages & notes",
+    "description": "Short messages carry useful context and a clear point. Paper plane uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M19 53 109 20 76 110 59 72 19 53Z M59 72 109 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  }
+]

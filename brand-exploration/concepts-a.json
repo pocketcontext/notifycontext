@@ -1,0 +1,240 @@
+[
+  {
+    "id": 1,
+    "name": "Quiet bell",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Quiet bell uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M30 86H98L88 72V51A24 24 0 0 0 40 51V72Z M54 101Q64 110 74 101 M64 19V26\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 2,
+    "name": "Offset chime",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Offset chime uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M26 87H88L80 73V52A23 23 0 0 0 34 52V73Z M48 101H66\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"96\" cy=\"30\" r=\"12\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 3,
+    "name": "Bell aperture",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Bell aperture uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M24 88 36 68V50A28 28 0 0 1 92 50V68L104 88H73V43H55V88Z\" fill=\"currentColor\"/><rect x=\"54\" y=\"98\" width=\"20\" height=\"10\" rx=\"5\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 4,
+    "name": "Double chime",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Double chime uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M19 78 27 64V47Q27 28 45 28Q60 28 64 44 M52 87H106L97 72V57Q97 37 79 37Q61 37 61 57V72Z M70 100H88\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 5,
+    "name": "Hanging note",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Hanging note uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M23 24H105 M64 24V40 M34 91H94L85 75V61Q85 40 64 40Q43 40 43 61V75Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"104\" r=\"6\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 6,
+    "name": "Chime bars",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Chime bars uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<rect x=\"25\" y=\"36\" width=\"14\" height=\"51\" rx=\"7\" fill=\"currentColor\"/><rect x=\"57\" y=\"24\" width=\"14\" height=\"77\" rx=\"7\" fill=\"currentColor\"/><rect x=\"89\" y=\"43\" width=\"14\" height=\"44\" rx=\"7\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 7,
+    "name": "Open bell",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Open bell uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M25 85 36 70V52Q36 27 60 27 M67 27Q92 29 92 52V70L103 85H25 M52 99Q64 110 76 99\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"20\" r=\"5\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 8,
+    "name": "Faceted bell",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Faceted bell uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M25 86 38 69 38 46 64 24 90 46 90 69 103 86Z M55 101H73\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 9,
+    "name": "Bell orbit",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Bell orbit uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M37 83H91L82 68V53Q82 35 64 35Q46 35 46 53V68Z M56 95H72 M23 53Q24 21 53 17 M105 53Q104 21 75 17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 10,
+    "name": "Soft canopy",
+    "family": "Bells & chimes",
+    "description": "A considered call for attention, with a calm silhouette. Soft canopy uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M23 77Q29 67 31 52Q34 26 64 26Q94 26 97 52Q99 67 105 77Q108 85 99 85H29Q20 85 23 77Z\" fill=\"currentColor\"/><path d=\"M50 101H78\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 11,
+    "name": "Signal seed",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Signal seed uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"32\" cy=\"94\" r=\"10\" fill=\"currentColor\"/><path d=\"M29 62Q65 62 66 99 M29 33Q96 34 95 99\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 12,
+    "name": "Signal crown",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Signal crown uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"81\" r=\"12\" fill=\"currentColor\"/><path d=\"M39 58Q64 33 89 58 M21 40Q64 0 107 40 M64 98V109\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 13,
+    "name": "Paired pulses",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Paired pulses uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"64\" r=\"9\" fill=\"currentColor\"/><path d=\"M43 39Q20 64 43 89 M85 39Q108 64 85 89 M27 24Q-3 64 27 104 M101 24Q131 64 101 104\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 14,
+    "name": "Ripple window",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Ripple window uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<rect x=\"22\" y=\"22\" width=\"84\" height=\"84\" rx=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\"/><circle cx=\"64\" cy=\"64\" r=\"9\" fill=\"currentColor\"/><path d=\"M43 45Q28 64 43 83 M85 45Q100 64 85 83\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 15,
+    "name": "Beamed point",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Beamed point uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"37\" cy=\"81\" r=\"13\" fill=\"currentColor\"/><path d=\"M59 81Q59 59 37 59 M78 81Q78 40 37 40 M98 81Q98 20 37 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 16,
+    "name": "Three echoes",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Three echoes uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M28 39 53 64 28 89 M53 39 78 64 53 89 M78 39 103 64 78 89\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 17,
+    "name": "Wave beacon",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Wave beacon uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M19 73H37L49 42 65 87 79 56H109\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"98\" cy=\"30\" r=\"8\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 18,
+    "name": "Half rings",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Half rings uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M21 94A43 43 0 0 1 107 94 M40 94A24 24 0 0 1 88 94\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"94\" r=\"7\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 19,
+    "name": "Signal flower",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Signal flower uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<circle cx=\"64\" cy=\"64\" r=\"12\" fill=\"currentColor\"/><path d=\"M64 19V33 M64 95V109 M19 64H33 M95 64H109 M32 32 42 42 M86 86 96 96 M32 96 42 86 M86 42 96 32\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 20,
+    "name": "Looped arrival",
+    "family": "Signals & ripples",
+    "description": "Signals radiate from one clear source. Looped arrival uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M44 99A40 40 0 1 1 103 56 M102 34 104 59 80 57\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"64\" r=\"12\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 21,
+    "name": "Open tray",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Open tray uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M20 76 36 35H92L108 76V101H20Z M20 76H47L53 87H75L81 76H108\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 22,
+    "name": "Incoming arrow",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Incoming arrow uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M24 73V101H104V73 M64 20V76 M45 58 64 77 83 58\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 23,
+    "name": "Tray dot",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Tray dot uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 65V100H106V65 M22 76H47L53 87H75L81 76H106\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"42\" r=\"15\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 24,
+    "name": "Nested inbox",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Nested inbox uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M23 31H105V96H23Z M23 66H47L54 77H74L81 66H105 M44 46H84\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 25,
+    "name": "Soft landing",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Soft landing uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M23 87Q64 118 105 87 M36 72Q64 93 92 72 M64 22V61 M50 47 64 61 78 47\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 26,
+    "name": "Envelope arrival",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Envelope arrival uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 47H106V99H22Z M22 47 64 76 106 47 M64 18V38 M48 26 64 39 80 26\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 27,
+    "name": "Mailbox flag",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Mailbox flag uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M25 99V61Q25 35 52 35H76Q103 35 103 61V99Z M52 35Q77 35 77 61V99 M41 68H60 M103 47V19H85V31H103\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 28,
+    "name": "Pocket catch",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Pocket catch uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M28 35V84L64 107 100 84V35 M28 35 48 51H80L100 35\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"64\" cy=\"26\" r=\"9\" fill=\"currentColor\"/>"
+  },
+  {
+    "id": 29,
+    "name": "Layered intake",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Layered intake uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 74H43L51 85H77L85 74H106V103H22Z M30 56H46L53 65H75L82 56H98 M41 36H54L59 43H69L74 36H87\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 30,
+    "name": "Arrival gate",
+    "family": "Inbox & arrival",
+    "description": "A clear destination for incoming attention. Arrival gate uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M22 98V31H44 M106 98V31H84 M45 89H83 M64 20V68 M49 53 64 68 79 53\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 31,
+    "name": "Acknowledgement ring",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Acknowledgement ring uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M103 62A40 40 0 1 1 71 25 M44 61 60 78 104 34\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 32,
+    "name": "Received square",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Received square uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<rect x=\"25\" y=\"25\" width=\"78\" height=\"78\" rx=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\"/><path d=\"M43 62 58 78 85 49\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 33,
+    "name": "Receipt seal",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Receipt seal uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M64 18 77 28 94 27 99 43 111 55 103 70 104 88 87 93 75 108 59 101 42 104 34 88 20 77 25 60 22 43 40 36 49 21Z M44 61 59 76 84 49\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  },
+  {
+    "id": 34,
+    "name": "Reply tick",
+    "family": "Acknowledgements",
+    "description": "An explicit reply makes attention visible. Reply tick uses a distinct arrangement of bold geometry for small-size recognition.",
+    "body": "<path d=\"M26 26H102V83H60L35 104V83H26Z M44 54 58 68 85 43\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+  }
+]
