@@ -161,3 +161,14 @@ deployment tools. These replace tests of the retired source-host rollback wrappe
 The maintained destination dispatcher owns stop-first and pending-marker semantics.
 Local workflow tests do not establish GitHub environment setup or live activation;
 record those separately after verification.
+
+## Browser-opening Google login — 21 October 2026
+
+`login --google` opens the printed URL with the standard library browser module
+unless `--no-browser` is given, `SSH_CONNECTION`/`SSH_TTY` is set or, outside macOS
+and Windows, no graphical display is available. A failed open never fails login.
+Unit tests mock the browser module. Integration, security, realtime, auth, OAuth
+integration, pending-recipient, portable skill, deployment, populated backup,
+maintenance, client (15), OAuth (15), deployment-workflow (10) and entrypoint
+checks passed against server `976ddf71a4734530adefe4a56633658a0894b449`. Browser UI
+source was unchanged; frontend and container checks were not rerun locally.

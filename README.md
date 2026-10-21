@@ -58,7 +58,7 @@ Disable an account to revoke its tokens. Changing verification also rotates toke
 
 ## Agent skill
 
-Install uv and copy `skills/notifycontext/notifycontext` onto PATH (for example, `install -Dm755 skills/notifycontext/notifycontext ~/.local/bin/notifycontext`). The standalone launcher installs its pinned package and dependencies on first use; later runs reuse the uv cache. No neighboring source files are required. Set `NOTIFYCONTEXT_URL` and `NOTIFYCONTEXT_USER_EMAIL`; use Google login or an existing user's `NOTIFYCONTEXT_USER_PASSWORD`.
+Install uv and copy `skills/notifycontext/notifycontext` onto PATH (for example, `install -Dm755 skills/notifycontext/notifycontext ~/.local/bin/notifycontext`). The standalone launcher installs its pinned package and dependencies on first use; later runs reuse the uv cache. No neighboring source files are required. Set `NOTIFYCONTEXT_URL` and `NOTIFYCONTEXT_USER_EMAIL`; use Google login or an existing user's `NOTIFYCONTEXT_USER_PASSWORD`. `login --google` prints the sign-in URL and opens the default browser unless `--no-browser` is given, an SSH session is detected or no browser is available.
 
 ```sh
 notifycontext login --google
