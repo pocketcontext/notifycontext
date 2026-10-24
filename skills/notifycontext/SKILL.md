@@ -25,7 +25,7 @@ Run `whoami` and `check` when establishing a session. `check` compares the live 
 
 Only change the user's own status/preferences. Status (available, busy, in a meeting, away) communicates expectations; pausing desktop alerts is separate and never blocks inbox delivery. Interpret an expired status as `not_set`. Do not infer online presence or calendar activity. Browser desktop alerts require an open app and permission; this release has no background push.
 
-The client reads through filtered SQL and writes through authenticated REST. Do not use direct database access. Keep token caches private; never paste authentication output or credentials into notifications.
+The client reads through filtered SQL and writes through authenticated REST. Do not use direct database access. The session token is saved with mode 0600 in `$XDG_STATE_HOME/notifycontext/` (default `~/.local/state/notifycontext/`), or in `NOTIFYCONTEXT_SESSION_DIR` when set, so clearing `~/.cache` does not sign you out; a session left in `~/.cache/notifycontext/` by an older client is moved there on first use, and `logout` removes both. Keep session files private; never paste authentication output or credentials into notifications.
 
 ## Browser links
 

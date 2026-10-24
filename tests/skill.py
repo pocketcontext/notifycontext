@@ -32,7 +32,7 @@ def main():
         shutil.copy2(args.client or ROOT / 'skills/notifycontext/notifycontext', skill)
         command = [str(skill)] if args.client else [sys.executable, str(skill)]
         assert (ROOT / 'src/notifycontext_client/schema.json').read_bytes() == snapshot.read_bytes()
-        env = {**os.environ, 'XDG_CACHE_HOME': str(Path(tmp) / 'cache'),
+        env = {**os.environ, 'XDG_CACHE_HOME': str(Path(tmp) / 'cache'), 'XDG_STATE_HOME': str(Path(tmp) / 'state'),
                'NOTIFYCONTEXT_URL': request.base_url, 'NOTIFYCONTEXT_USER_EMAIL': 'sender@example.com',
                'NOTIFYCONTEXT_USER_PASSWORD': PASSWORD}
         if args.trace:
