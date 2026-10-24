@@ -1,8 +1,9 @@
 # Deployment
 
-NotifyContext runs at `https://notify.pocketcontext.com` on the existing `once-v2`
-host. The maintained private scaffold is the sibling `once-pocketcontext-v2`
-repository. Preserve its application identity, volume, private primary-file bucket,
+NotifyContext runs at `https://notify.pocketcontext.com` on the `pocketdeploy-v2`
+host. The maintained private scaffold is the sibling `pocketdeploy-v2` repository;
+the application moved there from `once-pocketcontext-v2` on 24 October 2026 by
+recovering its Litestream replica onto an empty volume. Preserve its application identity, volume, private primary-file bucket,
 independent Litestream replica, runtime settings and resource limits. The retired
 source-host volume must never restart beside the destination writer.
 
@@ -12,12 +13,12 @@ source-host volume must never restart beside the destination writer.
 after application tests and container configuration, smoke and recovery checks.
 After successful manifest publication, its deployment job runs when
 `COLORS_PROFILE` is nonempty and `CONTEXT_DEPLOY_PAUSED` is not `true`. The intended
-profile is `once-v2`; configure that GitHub environment for main-only deployment.
+profile is `pocketdeploy-v2`; PocketDeploy creates that main-only GitHub environment.
 It supplies `SSH_PRIVATE_KEY` as a secret and `SERVER_IP`, `SERVER_USER` and
 pinned `SSH_KNOWN_HOSTS` as variables. A missing host-key pin stops deployment.
 
-SSH sends no remote command. The dedicated restricted key invokes the maintained
-ONCE stop-first dispatcher for NotifyContext. The destination policy tracks
+SSH sends no remote command. The PocketDeploy key triggers the host's stop-first
+deployment of the hosts it owns. The destination policy tracks
 `ghcr.io/pocketcontext/notifycontext:latest`, uses a 300-second graceful stop and
 keeps ONCE automatic image updates disabled. Publication and deployment are
 serialized without cancelling an active deployment. CI checks NotifyContext's
@@ -33,7 +34,7 @@ The app-local `deploy/deploy-notifycontext.py` and `deploy/install.py` commands 
 retired and fail closed. Do not install them: they implement the obsolete source
 host's update/rollback behavior. `deploy/once-application.yml` is a historical
 source-scaffold fragment, not the destination configuration. Maintain deployment
-policy through `once-pocketcontext-v2`, preserving sibling application policies and
+policy through `pocketdeploy-v2`, preserving sibling application policies and
 keys. Do not run full scaffold convergence just to deploy an application release.
 
 A failed destination update retains its pending marker under

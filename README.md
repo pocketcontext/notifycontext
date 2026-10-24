@@ -242,14 +242,15 @@ fresh databases against separate, bucket-scoped synthetic MinIO identities.
 ## Continuous deployment
 
 After successful main-branch image publication, `image.yml` deploys through the
-main-only `once-v2` GitHub environment when `COLORS_PROFILE=once-v2` and
-`CONTEXT_DEPLOY_PAUSED` is not `true`. Publication retains its separate
+main-only `pocketdeploy-v2` GitHub environment when `COLORS_PROFILE=pocketdeploy-v2`
+and `CONTEXT_DEPLOY_PAUSED` is not `true`. Publication retains its separate
 `NOTIFYCONTEXT_PUBLISH_ENABLED` guard. Set the pause to `true` to publish without
 deploying; it does not interrupt a deployment already running.
 
-The restricted SSH key sends no command and uses pinned host keys. The maintained
-`once-pocketcontext-v2` stop-first dispatcher preserves one writer, uses a
-300-second graceful stop and retains a pending marker after failure. It does not
-automatically roll back. ONCE automatic updates remain disabled. The app-local
+The PocketDeploy SSH key sends no command and uses pinned host keys. The host's
+stop-first policy preserves one writer, uses a 300-second graceful stop and
+preserves volumes. It does not automatically roll back. NotifyContext moved from
+`once-pocketcontext-v2` to the private `pocketdeploy-v2` scaffold on 24 October
+2026 by recovery from its replica. ONCE automatic updates remain disabled. The app-local
 legacy deployment wrapper and installer are retired and refuse to run.
 See [deployment controls and recovery](docs/deployment.md).
