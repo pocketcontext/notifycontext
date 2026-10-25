@@ -30,12 +30,10 @@ The pause does not stop a deployment already running or fence another host. Keep
 it set while preparing credentials or changing deployment policy; enable deployment
 only after the destination policy and restricted key are verified.
 
-The app-local `deploy/deploy-notifycontext.py` and `deploy/install.py` commands are
-retired and fail closed. Do not install them: they implement the obsolete source
-host's update/rollback behavior. `deploy/once-application.yml` is a historical
-source-scaffold fragment, not the destination configuration. Maintain deployment
-policy through `pocketdeploy-v2`, preserving sibling application policies and
-keys. Do not run full scaffold convergence just to deploy an application release.
+The app-local deployment wrapper, installer and `once-application.yml` fragment
+for the retired `once-pocketcontext-v2` host were removed; the repository ships no
+deployment commands. Maintain deployment policy through `pocketdeploy-v2`,
+preserving sibling application policies and keys. Do not run full scaffold convergence just to deploy an application release.
 
 A failed destination update retains its pending marker under
 `/var/lib/once-deploy/notify.pocketcontext.com.pending`; there is no automatic
@@ -77,5 +75,5 @@ rollback after production has accepted later writes.
 
 Run `python3 tests/deploy_workflow.py` for the deployment guards, commandless SSH,
 host-key failure, remote failure propagation, health target and retired-command
-checks. The destination dispatcher's stop-first/pending-marker behavior is maintained
+removal checks. The destination dispatcher's stop-first/pending-marker behavior is maintained
 and validated in the ONCE scaffold/package, not duplicated in this app repository.

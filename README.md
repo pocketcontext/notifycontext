@@ -252,5 +252,5 @@ stop-first policy preserves one writer, uses a 300-second graceful stop and
 preserves volumes. It does not automatically roll back. NotifyContext moved from
 `once-pocketcontext-v2` to the private `pocketdeploy-v2` scaffold on 24 October
 2026 by recovery from its replica. ONCE automatic updates remain disabled. The app-local
-legacy deployment wrapper and installer are retired and refuse to run.
+legacy deployment wrapper, installer and ONCE fragment were removed.
 See [deployment controls and recovery](docs/deployment.md).

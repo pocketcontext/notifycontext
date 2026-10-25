@@ -39,11 +39,12 @@ resolves `latest` when it runs; the commandless SSH contract does not carry the
 workflow's digest. Record independent runtime revision evidence when releasing.
 Host-local locks are not distributed fencing, and Litestream remains asynchronous.
 
-Old `deploy/install.py`, app-local deployment wrappers and any old bootstrap
-commands fail closed. They must not overwrite shared authorized keys or restart
-retained source state. New deployment provisioning, storage creation and DNS
-changes require a separate explicitly authorized operation. Container `init` is
-only for a genuinely fresh installation, never an existing volume or replica.
+The old-host installer, app-local deployment wrapper and ONCE application
+fragment were removed. Do not recreate them: they must not overwrite shared
+authorized keys or restart retained source state. New deployment provisioning,
+storage creation and DNS changes require a separate explicitly authorized
+operation. Container `init` is only for a genuinely fresh installation, never an
+existing volume or replica.
 
 After source changes, run the repository's README validation and the isolated
 workflow checks:
