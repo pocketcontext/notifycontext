@@ -230,7 +230,10 @@ Do not run init to repair a missing production replica.
 Recovery stages SQLite outside the live data directory, checks integrity, inventories
 all actual PocketBase file fields (including user avatars), and streams every referenced
 S3 file to verify readability and complete transfer before installing the database
-atomically and syncing the directory. NotifyContext has no authoritative file hashes;
+atomically and syncing the directory. Every start, including restarts on an existing
+volume, downloads these files in parallel (`NOTIFYCONTEXT_VERIFY_CONCURRENCY`, 1–64,
+default 16) so the server becomes ready within ONCE's fixed 120-second deployment
+wait; the first failure refuses startup. NotifyContext has no authoritative file hashes;
 this check does not establish cryptographic content integrity. Primary bucket backups
 and retention remain separate. Frozen recovery additionally requires the private
 maintenance marker and consistent auxiliary database; Litestream restores neither.

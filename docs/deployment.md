@@ -64,7 +64,9 @@ destinations are not backed up by NotifyContext.
 For a new installation, run one-shot `init` on the intended empty volume and empty
 replica before normal startup. Existing production updates must use the existing
 volume, not `init`. Empty-volume recovery requires a replica, stages SQLite and
-checks every referenced remote file before installation. Preserve `maintenance.json`
+checks every referenced remote file before installation. ONCE v0.3.3 waits a fixed
+120 seconds for readiness, so remote file verification runs in parallel
+(`NOTIFYCONTEXT_VERIFY_CONCURRENCY`) on every start. Preserve `maintenance.json`
 and a consistent `auxiliary.db` separately for frozen recovery.
 
 For disaster recovery, stop/fence the existing writer, preserve the failed volume,
