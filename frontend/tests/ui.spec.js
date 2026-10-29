@@ -3,17 +3,57 @@ const user='user00000000001',sender='user00000000002';
 const jwt=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:user,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
 const now=new Date().toISOString();
 const initial={id:'note00000000001',sender,subject:'Supplier renewal ready',body_markdown:'## Review requested\n\nPlease review the [handoff](https://example.com).\n\n| Item | Status |\n| --- | --- |\n| Quote | Ready |\n\n```js\nconst approved = false;\n```\n\n<img src=x onerror="window.attacked=true">\n\n[bad](javascript:window.attacked=true)',kind:'review_requested',ack_required:true,due_at:'',withdrawn_at:'',withdrawal_reason:'',revision:1,created:now};
-async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false}={}) {
+const users={[user]:'Vamsi',[sender]:'Jack'};
+// Query shapes: consolidated refresh, consolidated detail, joined directory, and the separate fallback/legacy reads.
+const classify=sql=>sql.startsWith('WITH page')?'inbox':sql.includes(') AS recipients')?'detail':sql.includes('FROM user_directory d LEFT JOIN')?'directory':sql.includes('recipient_total') || sql.startsWith('SELECT * FROM notifications')?'note':sql.includes('FROM notification_recipients r LEFT JOIN')?'recipients':sql.includes('FROM notification_references')?'references':sql.includes('FROM user_directory')?'users':sql.includes('FROM user_status')?'statuses':sql.includes('FROM notification_preferences')?'preferences':sql.startsWith('SELECT n.id, n.created')?'latest':sql.includes('count(*) AS total')?'unread':'list';
+const viewerOf=request=>{try{return JSON.parse(Buffer.from(request.headers().authorization.split('.')[1],'base64url')).id;}catch{return '';}};
+async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false,preference:initialPreference=null,body,subject}={}) {
   let releaseRead;const readGate=new Promise(resolve=>{releaseRead=resolve;});
-  const writes=[],notices=[];let preference=null;let notes=Array.from({length:count},(_,i)=>({...initial,id:'note'+String(i+1).padStart(11,'0'),subject:i?'Notification '+(i+1):initial.subject}));
-  let recipients=notes.map((n,i)=>({id:'recp'+String(i+1).padStart(11,'0'),notification:n.id,recipient:user,read_at:'',acknowledged_at:'',archived_at:'',acknowledgement_markdown:'',revision:1,created:now}));
+  const writes=[],queries=[],oversize=new Set(),tooBig=new Set(),statuses=[];let preference=initialPreference,unreadOverride=null;
+  let notes=Array.from({length:count},(_,i)=>({...initial,id:'note'+String(i+1).padStart(11,'0'),subject:i?'Notification '+(i+1):subject||initial.subject,body_markdown:i?initial.body_markdown:body||initial.body_markdown}));
+  let recipients=notes.map((n,i)=>({id:'recp'+String(i+1).padStart(11,'0'),notification:n.id,recipient:user,addressed_email:'',claimed_at:'',claim_expires_at:'',read_at:'',acknowledged_at:'',archived_at:'',acknowledgement_markdown:'',revision:1,created:now}));
   if(pending){
     notes[0].sender=user;if(withdrawn){notes[0].withdrawn_at=now;notes[0].withdrawal_reason='Superseded';}
     recipients=[{...recipients[0],recipient:sender,recipient_name:'Jack',addressed_email:'jack@example.test',claimed_at:now,claim_expires_at:''},
       {...recipients[0],id:'pending00000001',recipient:'',recipient_name:null,addressed_email:'new.colleague@example.test',claimed_at:'',claim_expires_at:new Date(Date.now()+30*86400000).toISOString()},
-      {...recipients[0],id:'expired00000001',recipient:'',recipient_name:null,addressed_email:'expired.colleague@example.test',claimed_at:'',claim_expires_at:'2020-01-01 00:00:00.000Z'}];
+      {...recipients[0],id:'expired00000001',recipient:'',recipient_name:null,addressed_email:'expired.colleague@example.test',claimed_at:'',claim_expires_at:'2020-01-01 00:00:00.000Z'},...recipients.slice(1)];
   }
   const result=records=>({columns:Object.keys(records[0]||{}),rows:records.map(Object.values),truncated:false});
+  const literal=(sql,pattern)=>{const match=sql.match(pattern);return match?match[1].replaceAll("''","'"):null;};
+  const page31=sql=>({offset:Number(sql.match(/OFFSET (\d+)\s*$/)?.[1] || 0),limit:Number(sql.match(/LIMIT (\d+) OFFSET \d+\s*$/)?.[1] || 1000)});
+  const visibleNote=(n,viewer)=>n.sender===viewer || recipients.some(r=>r.notification===n.id && r.recipient===viewer);
+  function listRows(sql,viewer) {
+    const {offset,limit}=page31(sql),search=literal(sql,/instr\(lower\(n\.subject\),lower\('((?:[^']|'')*)'\)\)/),mine=n=>recipients.find(r=>r.notification===n.id && r.recipient===viewer);
+    let items=sql.includes('WHERE n.sender=')?notes.filter(n=>n.sender===viewer).map(n=>({n,r:null})):notes.map(n=>({n,r:mine(n)})).filter(({r})=>r && (sql.includes("r.archived_at != ''")?!!r.archived_at:!r.archived_at));
+    if(sql.includes(" AND (r.read_at='' OR r.read_at IS NULL)"))items=items.filter(({r})=>!r.read_at);
+    if(sql.includes('n.ack_required=1'))items=items.filter(({n,r})=>n.ack_required && !n.withdrawn_at && !r?.acknowledged_at);
+    if(search!==null)items=items.filter(({n})=>n.id===search || n.subject.toLowerCase().includes(search.toLowerCase()) || n.body_markdown.toLowerCase().includes(search.toLowerCase()));
+    return items.slice(offset,offset+limit).map(({n,r})=>({id:n.id,sender:n.sender,subject:n.subject,excerpt:[...n.body_markdown].slice(0,140).join(''),...(sql.includes('n.*')?n:{}),kind:n.kind,ack_required:n.ack_required,withdrawn_at:n.withdrawn_at,created:n.created,recipient_record:r?.id ?? null,read_at:r?.read_at ?? null,acknowledged_at:r?.acknowledged_at ?? null,archived_at:r?.archived_at ?? null,recipient_revision:r?.revision ?? null}));
+  }
+  const latest=viewer=>notes.filter(n=>!n.withdrawn_at && recipients.some(r=>r.notification===n.id && r.recipient===viewer)).slice(0,100).map(n=>({id:n.id,created:n.created}));
+  const unread=viewer=>unreadOverride ?? recipients.filter(r=>r.recipient===viewer && !r.read_at && !r.archived_at && !notes.find(n=>n.id===r.notification)?.withdrawn_at).length;
+  const prefs=()=>preference?[{id:preference.id,alerts_paused_until:preference.alerts_paused_until,revision:preference.revision}]:[];
+  const directory=()=>Object.entries(users).map(([id,name])=>{const status=statuses.find(s=>s.user===id);return {id,name,status_id:status?.id ?? null,availability:status?.availability ?? null,message:status?.message ?? null,expires_at:status?.expires_at ?? null,status_revision:status?.revision ?? null};});
+  const noteFor=(sql,viewer)=>{const id=literal(sql,/(?:n\.id|WHERE id)=\'([a-z0-9]{15})\'/);const n=notes.find(item=>item.id===id);return n && visibleNote(n,viewer)?n:null;};
+  const peopleFor=(n,viewer)=>recipients.filter(r=>r.notification===n.id && (n.sender===viewer || r.recipient===viewer)).map(({notification,...r})=>({...r,recipient_name:r.recipient_name ?? users[r.recipient] ?? null}));
+  const refsFor=n=>n.id===notes[0]?.id?[{id:'ref000000000001',kind:'url',label:'Supporting document',url:'https://example.com',created:now}]:[];
+  const detailNote=(n,viewer)=>{const {submission_key,updated,...fields}=n;return {...fields,recipient_total:peopleFor(n,viewer).length,reference_total:refsFor(n).length};};
+  function answer(sql,viewer) {
+    const kind=classify(sql),n=['detail','note'].includes(kind)?noteFor(sql,viewer):null;
+    if(oversize.has(kind))return {columns:['x'],rows:[],truncated:true};
+    if(kind==='inbox'){const list=sql.slice(sql.indexOf(' AS (')+5,sql.indexOf('), latest(id, created) AS ('));return result([{unread:unread(viewer),latest:JSON.stringify(latest(viewer)),list:JSON.stringify(listRows(list,viewer)),preferences:prefs()[0]?JSON.stringify(prefs()[0]):null}]);}
+    if(kind==='detail')return result(n?[{...detailNote(n,viewer),recipients:JSON.stringify(peopleFor(n,viewer)),refs:JSON.stringify(refsFor(n))}]:[]);
+    if(kind==='directory'){const {offset,limit}=page31(sql);return result(directory().slice(offset,offset+limit));}
+    if(kind==='note')return result(n?[sql.startsWith('SELECT * ')?n:detailNote(n,viewer)]:[]);
+    if(kind==='recipients'){const m=notes.find(item=>sql.includes(item.id));const {offset,limit}=page31(sql);return result(m && visibleNote(m,viewer)?peopleFor(m,viewer).slice(offset,offset+limit):[]);}
+    if(kind==='references'){const m=notes.find(item=>sql.includes(item.id));return result(m && visibleNote(m,viewer)?refsFor(m):[]);}
+    if(kind==='users')return result(Object.entries(users).map(([id,name])=>({id,name})));
+    if(kind==='statuses')return result(statuses);
+    if(kind==='preferences')return result(prefs());
+    if(kind==='latest')return result(latest(viewer));
+    if(kind==='unread')return result([{total:unread(viewer)}]);
+    return result(listRows(sql,viewer));
+  }
   await page.addInitScript(()=>{
     window.realtimeConnections=[];
     window.EventSource=class extends EventTarget {
@@ -30,33 +70,28 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
     if(url.pathname.endsWith('/auth-with-password'))data={token:jwt,record:{id:user,name:'Vamsi',collectionName:'users',email:'vamsi@example.test'}};
     else if(url.pathname.endsWith('/auth-refresh')){const token=request.headers().authorization;const id=JSON.parse(Buffer.from(token.split('.')[1],'base64url')).id;data={token,record:{id,name:id===user?'Vamsi':'Other colleague',collectionName:'users'}};}
     else if(url.pathname==='/api/context/query') {
-      const sql=body.sql;
-      if(sql.includes('FROM user_directory'))data=result([{id:user,name:'Vamsi'},{id:sender,name:'Jack'}]);
-      else if(sql.includes('FROM user_status'))data=result([]);
-      else if(sql.includes('FROM notification_preferences'))data=result(preference?[preference]:[]);
-      else if(sql.includes('count(*)')){expect(sql).toContain("n.withdrawn_at");data=result([{total:recipients.filter(r=>r.recipient===user && !r.read_at && !r.archived_at && !notes.find(n=>n.id===r.notification)?.withdrawn_at).length}]);}
-      else if(sql.startsWith('SELECT n.id, n.created'))data=result(notes.map(n=>({id:n.id,created:n.created})));
-      else if(sql.includes('FROM notification_references'))data=result([{id:'ref000000000001',notification:notes[0].id,label:'Supporting document',url:'https://example.com',kind:'url'}]);
-      else if(sql.includes('FROM notification_recipients'))data=result(recipients.filter(r=>sql.includes(r.notification)));
-      else if(sql.startsWith('SELECT * FROM notifications'))data=result(notes.filter(n=>sql.includes(n.id)));
-      else {
-        const offset=Number(sql.match(/OFFSET (\d+)/)?.[1] || 0);
-        let filtered=notes;
-        if(sql.includes("lower('missing')"))filtered=[];
-        data=result(filtered.slice(offset,offset+31).map(n=>({...n,recipient_record:recipients.find(r=>r.notification===n.id).id,...Object.fromEntries(['read_at','acknowledged_at','archived_at'].map(k=>[k,recipients.find(r=>r.notification===n.id)[k]])),recipient_revision:1})));
-      }
+      const sql=body.sql,kind=classify(sql);queries.push({kind,sql,at:Date.now()});
+      if(tooBig.has(kind)){await route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({status:400,message:'SQL query rejected: string or blob too big.',data:{}})});return;}
+      data=answer(sql,viewerOf(request));
     } else {
       writes.push({path:url.pathname,body});
       const recipient=recipients.find(r=>url.pathname.endsWith('/'+r.id));
-      if(recipient){if(body.action==='archive')recipient.archived_at=now;if(body.action==='unarchive')recipient.archived_at='';if(body.action==='read')recipient.read_at=now;if(body.action==='acknowledge'){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}data=recipient;}
-      else if(url.pathname.includes('notification_preferences')){preference={id:'prefs0000000001',revision:1,...body};data=preference;}else data={...initial,id:'created00000001',...body};
+      if(recipient){if(body.action==='archive')recipient.archived_at=now;if(body.action==='unarchive')recipient.archived_at='';if(body.action==='read')recipient.read_at=now;if(body.action==='acknowledge'){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}recipient.revision++;data=recipient;}
+      else if(url.pathname.includes('notification_preferences')){preference={id:'prefs0000000001',revision:(preference?.revision || 0)+1,...body};delete preference.expected_revision;data=preference;}
+      else if(url.pathname.includes('user_status')){const status={id:'status000000001',user,revision:1,...body};statuses.splice(0,statuses.length,status);data=status;}
+      else data={...initial,id:'created00000001',...body};
     }
     if(holdRead && body?.action==='read')await readGate;
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
   await page.goto('/');if(!restore){await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();}await expect(page.locator('#view-title')).toHaveText('Inbox');await expect(page.locator('#filter-label')).toHaveText('All');await expect(page.locator('#connection')).toContainText('Connected');
-  return {writes,releaseRead,addNotification(){notes.unshift({...initial,id:'new000000000001',created:new Date().toISOString(),subject:'New update'});recipients.unshift({id:'newrec000000001',notification:'new000000000001',recipient:user,revision:1,read_at:'',acknowledged_at:'',archived_at:''});}};
+  return {writes,queries,oversize,tooBig,releaseRead,notes:()=>notes,recipients:()=>recipients,
+    kinds:(from=0)=>queries.slice(from).map(query=>query.kind),
+    setUnread(value){unreadOverride=value;},
+    setPreference(value){preference=value;},
+    addNotification(){notes.unshift({...initial,id:'new000000000001',created:new Date().toISOString(),subject:'New update'});recipients.unshift({id:'newrec000000001',notification:'new000000000001',recipient:user,revision:1,read_at:'',acknowledged_at:'',archived_at:'',acknowledgement_markdown:'',addressed_email:'',claimed_at:'',claim_expires_at:'',created:now});}};
 }
+const settle=page=>page.waitForTimeout(2600);
 test('safe Markdown detail and explicit recipient actions',async({page})=>{
   const {writes,releaseRead}=await setup(page,{holdRead:true});
   await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
@@ -103,7 +138,7 @@ test('revoked session returns to login and clears private content',async({page})
 });
 
 test('revoked session during detail loading cannot render stale content',async({page})=>{
- const errors=[];page.on('pageerror',error=>errors.push(error.message));await setup(page);await page.route('**/api/context/query',async route=>{if(route.request().postDataJSON().sql.startsWith('SELECT * FROM notifications'))await route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({message:'Authentication required'})});else await route.fallback();});
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));await setup(page);await page.route('**/api/context/query',async route=>{if(classify(route.request().postDataJSON().sql)==='detail')await route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({message:'Authentication required'})});else await route.fallback();});
  await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();expect(errors).toEqual([]);await expect(page.locator('article')).toHaveCount(0);
 });
 
@@ -146,9 +181,8 @@ test('persistent login and cross-tab logout discard late private responses',asyn
   let release;const gate=new Promise(resolve=>{release=resolve;});
   let requested;const started=new Promise(resolve=>{requested=resolve;});
   await page.route('**/api/context/query',async route=>{
-    if(route.request().postDataJSON().sql.startsWith('SELECT * FROM notifications')){
-      requested();await gate;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:Object.keys(initial),rows:[Object.values(initial)],truncated:false})});
-    }else await route.fallback();
+    if(classify(route.request().postDataJSON().sql)==='detail'){requested();await gate;await route.fallback();}
+    else await route.fallback();
   });
   await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await started;
   await peer.getByRole('button',{name:'Sign out',exact:true}).click();
@@ -278,21 +312,188 @@ test('reconnect and fallback polling recover changes without an inbox signal',as
  mock.addNotification();
  await page.evaluate(()=>window.realtimeConnections.at(-1).dispatchEvent(new MessageEvent('PB_CONNECT',{data:'{}',lastEventId:'reconnected-client'})));
  await expect(page).toHaveTitle('(2) NotifyContext');
- await page.route('**/api/context/query',async route=>{if(route.request().postDataJSON().sql.includes('count(*)'))await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:['total'],rows:[[3]],truncated:false})});else await route.fallback();});
+ mock.setUnread(3);
  await page.clock.fastForward(60000);await expect(page).toHaveTitle('(3) NotifyContext');
 });
 test('an inbox event during an in-flight poll schedules a follow-up and logout rejects stale count',async({page})=>{
  const mock=await setup(page);let release,started;
  const gate=new Promise(resolve=>{release=resolve;}),requested=new Promise(resolve=>{started=resolve;});let held=false;
  await page.route('**/api/context/query',async route=>{
-  if(!held && route.request().postDataJSON().sql.includes('count(*)')){held=true;started();await gate;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:['total'],rows:[[1]],truncated:false})});}else await route.fallback();
+  if(!held && classify(route.request().postDataJSON().sql)==='inbox'){held=true;started();await gate;mock.setUnread(1);await route.fallback();}else await route.fallback();
  });
  await page.getByRole('button',{name:'Refresh notifications'}).click();await requested;
- mock.addNotification();await page.evaluate(()=>window.inboxSignal());release();await expect(page).toHaveTitle('(2) NotifyContext');
+ mock.addNotification();await page.evaluate(()=>window.inboxSignal());release();await expect(page).toHaveTitle('(1) NotifyContext');
+ // The stale in-flight result is followed by exactly the one queued refresh.
+ mock.setUnread(null);await expect(page).toHaveTitle('(2) NotifyContext');
  let releaseAgain,startedAgain;const gateAgain=new Promise(resolve=>{releaseAgain=resolve;}),requestedAgain=new Promise(resolve=>{startedAgain=resolve;});
  await page.route('**/api/context/query',async route=>{
-  if(route.request().postDataJSON().sql.includes('count(*)')){startedAgain();await gateAgain;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:['total'],rows:[[99]],truncated:false})});}else await route.fallback();
+  if(classify(route.request().postDataJSON().sql)==='inbox'){startedAgain();await gateAgain;mock.setUnread(99);await route.fallback();}else await route.fallback();
  });
  await page.getByRole('button',{name:'Refresh notifications'}).click();await requestedAgain;
  await page.getByRole('button',{name:'Sign out',exact:true}).click();releaseAgain();await expect(page).toHaveTitle('NotifyContext');await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();
+});
+
+test('request budget: startup, steady refresh, detail open and recipient action',async({page})=>{
+ const mock=await setup(page,{count:3});await settle(page);
+ // Startup: one joined directory/status page and one consolidated refresh; realtime connect joins it.
+ expect(mock.kinds()).toEqual(['directory','inbox']);
+ let mark=mock.queries.length;await page.evaluate(()=>window.dispatchEvent(new Event('online')));await settle(page);
+ expect(mock.kinds(mark)).toEqual(['inbox']);
+ mark=mock.queries.length;await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page.locator('.detail-title')).toBeVisible();await page.waitForTimeout(500);
+ expect(mock.kinds(mark)).toEqual(['detail']);expect(mock.writes).toHaveLength(0);
+ mark=mock.queries.length;await page.getByRole('button',{name:'Mark read',exact:true}).click();await expect(page.getByRole('button',{name:'Mark read',exact:true})).toHaveCount(0);await settle(page);
+ expect(mock.kinds(mark).sort()).toEqual(['detail','inbox']);expect(mock.writes.map(write=>write.body.action)).toEqual(['read']);
+ expect(mock.writes[0].path).toMatch(/\/notification_recipients\/records\/recp00000000001$/);expect(mock.writes[0].body.expected_revision).toBe(1);
+ // The list excerpt is selected in SQL; full bodies stay out of the refresh.
+ const inbox=mock.queries.find(query=>query.kind==='inbox').sql;expect(inbox).not.toContain('n.*');expect(inbox).toContain('substr(n.body_markdown,1,140)');
+});
+test('direct link startup reads the detail once and hashchange avoids redundant reloads',async({page})=>{
+ const mock=await setup(page,{count:65});
+ await page.goto('/#/notifications/note00000000065?view=inbox&page=1');await expect(page.locator('.detail-title')).toHaveText('Notification 65');await settle(page);
+ let mark=mock.queries.length;await page.reload();
+ await expect(page.locator('.detail-title')).toHaveText('Notification 65');await settle(page);
+ expect(mock.kinds(mark)).toEqual(['directory','inbox','detail']);
+ await expect(page.locator('#page-label')).toHaveText('Page 2');await expect(page.locator('.notification-row')).toHaveCount(30);
+ // Back to the list (no detail read), then forward to the same record: the list is unchanged, so no reads at all.
+ mark=mock.queries.length;await page.evaluate(()=>{location.hash='#/?view=inbox&page=1';});await expect(page.locator('.detail-placeholder')).toBeVisible();await page.waitForTimeout(500);
+ expect(mock.kinds(mark)).toEqual([]);
+ await page.evaluate(()=>{location.hash='#/notifications/note00000000065?view=inbox&page=1';});await expect(page.locator('.detail-title')).toHaveText('Notification 65');await page.waitForTimeout(500);
+ expect(mock.kinds(mark)).toEqual(['detail']);
+ mark=mock.queries.length;await page.evaluate(()=>{location.hash='#/notifications/note00000000065?view=inbox&page=2';});await expect(page.locator('#page-label')).toHaveText('Page 3');await page.waitForTimeout(500);
+ expect(mock.kinds(mark)).toEqual(['inbox']);await expect(page.locator('.detail-title')).toHaveText('Notification 65');
+ expect(mock.writes).toHaveLength(0);
+});
+test('an empty inbox still carries the unread total and alert pause',async({page})=>{
+ const mock=await setup(page,{count:0,permission:'granted',preference:{id:'prefs0000000001',alerts_paused_until:new Date(Date.now()+3600000).toISOString(),revision:1}});
+ await expect(page.getByRole('heading',{name:'You’re all caught up'})).toBeVisible();await expect(page.locator('#unread-count')).toHaveText('0');await expect(page).toHaveTitle('NotifyContext');
+ await expect(page.locator('#alerts')).toHaveText('Desktop alerts paused');await expect(page.locator('#pagination')).toBeHidden();
+ expect(mock.kinds()).toEqual(['directory','inbox']);
+});
+test('sent, archived, full-content search, filters and page boundaries',async({page})=>{
+ const mock=await setup(page,{count:60,pending:true,body:'Opening paragraph. '+'x'.repeat(200)+' hiddenkeyword at the end.'});
+ await expect(page.locator('.notification-row')).toHaveCount(30);await expect(page.locator('.notification-row').first().locator('.excerpt')).not.toContainText('hiddenkeyword');
+ await page.getByRole('button',{name:'Next →'}).click();await expect(page.locator('#page-label')).toHaveText('Page 2');
+ // 59 inbox rows: page 2 holds 29 and the 31-row probe disables Next exactly at the boundary.
+ await expect(page.locator('.notification-row')).toHaveCount(29);await expect(page.getByRole('button',{name:'Next →'})).toBeDisabled();
+ await page.getByRole('button',{name:'Sent',exact:false}).click();await expect(page.locator('.notification-row')).toHaveCount(1);await expect(page.locator('#pagination')).toBeHidden();
+ await page.getByRole('searchbox').fill('hiddenkeyword');await expect(page.locator('.notification-row')).toHaveCount(1);await expect(page.locator('.notification-row h2')).toHaveText('Supplier renewal ready');
+ await page.getByRole('button',{name:'Inbox',exact:false}).click();await page.getByRole('searchbox').fill('Notification 2');await expect(page.locator('.notification-row')).toHaveCount(11);
+ await page.getByRole('searchbox').fill('');await expect(page.locator('.notification-row')).toHaveCount(30);
+ await page.locator('.notification-row h2').filter({hasText:/^Notification 2$/}).click();await page.getByRole('button',{name:'Archive',exact:true}).click();await expect(page.getByRole('button',{name:'Move to inbox',exact:true})).toBeVisible();
+ await expect(page.locator('.notification-row h2').filter({hasText:/^Notification 2$/})).toHaveCount(0);
+ await page.getByRole('button',{name:'Archived',exact:false}).click();await expect(page.locator('.notification-row')).toHaveCount(1);await expect(page.locator('.notification-row h2')).toHaveText('Notification 2');
+ await page.getByRole('button',{name:'Inbox',exact:false}).click();await page.getByRole('button',{name:'Unread',exact:true}).click();await expect(page.locator('.notification-row')).toHaveCount(30);
+ // Totals and alert inputs ignore the displayed view, filter, search and page.
+ const sqls=mock.queries.filter(query=>query.kind==='inbox').map(query=>query.sql.slice(query.sql.indexOf('), latest(id, created) AS (')));
+ expect(new Set(sqls).size).toBe(1);await expect(page.locator('#unread-count')).toHaveText('58');
+});
+test('a 429 without Retry-After backs off, stays friendly and re-opens the selected detail',async({page})=>{
+ const mock=await setup(page);let limited=1;
+ await page.route('**/api/context/query',async route=>{if(limited>0 && classify(route.request().postDataJSON().sql)==='detail'){limited--;await route.fulfill({status:429,contentType:'application/json',body:JSON.stringify({status:429,message:'Too Many Requests.',data:{}})});}else await route.fallback();});
+ const mark=mock.queries.length;await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
+ await expect(page.locator('#detail')).toContainText(/NotifyContext is busy\. Retrying in \ds\./);await expect(page.getByText(/Too Many Requests/)).toHaveCount(0);
+ // Cooldown: manual and background triggers send nothing, the manual one explains the wait.
+ await page.getByRole('button',{name:'Refresh notifications'}).click();await page.evaluate(()=>{window.inboxSignal();document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'));});
+ await expect(page.locator('#notice')).toContainText(/busy\. Retrying in \ds/);
+ expect(mock.kinds(mark)).toEqual([]);
+ await expect(page.locator('.detail-title')).toHaveText('Supplier renewal ready',{timeout:5000});
+ await expect(page.locator('#notice')).toBeHidden();await expect(page.locator('#connection')).toContainText('Connected');
+ expect(mock.kinds(mark).sort()).toEqual(['detail','inbox']);expect(mock.writes).toHaveLength(0);
+});
+test('a 429 with Retry-After holds every refresh trigger until the hinted time',async({page})=>{
+ const mock=await setup(page);let limited=1,limitedAt=0;
+ await page.route('**/api/context/query',async route=>{if(limited>0 && classify(route.request().postDataJSON().sql)==='inbox'){limited--;limitedAt=Date.now();await route.fulfill({status:429,headers:{'Retry-After':'3'},contentType:'application/json',body:JSON.stringify({status:429,message:'Too many concurrent snapshot reads for this account',data:{}})});}else await route.fallback();});
+ await page.getByRole('button',{name:'Refresh notifications'}).click();
+ await expect(page.locator('#notice')).toContainText(/NotifyContext is busy\. Retrying in [34]s\./);await expect(page.locator('#connection')).toContainText('busy');
+ const mark=mock.queries.length;
+ for(let i=0;i<4;i++){await page.evaluate(()=>{window.inboxSignal();document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'));});await page.waitForTimeout(500);}
+ expect(mock.kinds(mark)).toEqual([]);
+ await expect(page.locator('#connection')).toContainText('Connected',{timeout:5000});await expect(page.locator('#notice')).toBeHidden();
+ const resumed=mock.queries.slice(mark);expect(resumed.map(query=>query.kind)).toEqual(['inbox']);expect(resumed[0].at-limitedAt).toBeGreaterThanOrEqual(3000);expect(resumed[0].at-limitedAt).toBeLessThan(4500);
+});
+test('navigation during a cooldown waits, and sign-out during a cooldown cancels queued reads',async({page})=>{
+ const mock=await setup(page,{pending:true});let limited=1;
+ await page.route('**/api/context/query',async route=>{if(limited>0){limited--;await route.fulfill({status:429,headers:{'Retry-After':'2'},contentType:'application/json',body:'{"message":"Too Many Requests."}'});}else await route.fallback();});
+ await page.getByRole('button',{name:'Refresh notifications'}).click();await expect(page.locator('#notice')).toContainText('busy');
+ let mark=mock.queries.length;await page.getByRole('button',{name:'Sent',exact:false}).click();await expect(page.locator('#view-title')).toHaveText('Sent');
+ await page.waitForTimeout(800);expect(mock.kinds(mark)).toEqual([]);
+ await expect(page.locator('.notification-row')).toHaveCount(1,{timeout:5000});expect(mock.kinds(mark)).toEqual(['inbox']);
+ limited=1;await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page.locator('#detail')).toContainText('busy');
+ mark=mock.queries.length;await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.getByRole('button',{name:'Continue with Google'})).toBeVisible();
+ await page.waitForTimeout(4000);expect(mock.kinds(mark)).toEqual([]);await expect(page.getByText('Supplier renewal ready')).toHaveCount(0);
+ // A new sign-in after the cooldown restores the route's record through ordinary startup, with no extra retry.
+ await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ await expect(page.locator('#connection')).toContainText('Connected');await settle(page);expect(mock.kinds(mark)).toEqual(['directory','inbox','detail']);await expect(page.locator('.detail-title')).toHaveText('Supplier renewal ready');
+});
+test('a transient detail failure retries after the next successful refresh',async({page})=>{
+ const mock=await setup(page);let failing=true;
+ await page.route('**/api/context/query',async route=>{if(failing && classify(route.request().postDataJSON().sql)==='detail')await route.fulfill({status:503,contentType:'application/json',body:'{"message":"Database busy; retry the query"}'});else await route.fallback();});
+ await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page.locator('#detail')).toContainText('Database busy');
+ failing=false;await page.getByRole('button',{name:'Refresh notifications'}).click();await expect(page.locator('.detail-title')).toHaveText('Supplier renewal ready');
+ expect(mock.writes).toHaveLength(0);
+});
+test('concurrent realtime, manual, visibility and online refreshes coalesce',async({page})=>{
+ const mock=await setup(page);await settle(page);mock.addNotification();
+ let mark=mock.queries.length;
+ // Background bursts, including one arriving during the in-flight refresh, yield one run plus at most one follow-up, 2 s apart.
+ const burst=()=>page.evaluate(()=>{for(let i=0;i<10;i++){window.inboxSignal();document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'));}});
+ await burst();await page.waitForTimeout(300);await burst();
+ await expect(page).toHaveTitle('(2) NotifyContext');await settle(page);await settle(page);
+ let kinds=mock.kinds(mark);expect(kinds.every(kind=>kind==='inbox')).toBe(true);expect(kinds.length).toBeGreaterThanOrEqual(1);expect(kinds.length).toBeLessThanOrEqual(2);
+ const times=mock.queries.slice(mark).map(query=>query.at);// Measured at request arrival, so allow for latency jitter around the 2 s browser-side interval.
+ for(let i=1;i<times.length;i++)expect(times[i]-times[i-1]).toBeGreaterThanOrEqual(1700);
+ // Manual refreshes skip the interval but share the queue: two clicks plus a burst are at most one read per click plus one follow-up.
+ mark=mock.queries.length;
+ await page.getByRole('button',{name:'Refresh notifications'}).click();await page.getByRole('button',{name:'Refresh notifications'}).click();await burst();
+ await settle(page);await settle(page);
+ kinds=mock.kinds(mark);expect(kinds.every(kind=>kind==='inbox')).toBe(true);expect(kinds.length).toBeGreaterThanOrEqual(1);expect(kinds.length).toBeLessThanOrEqual(3);
+});
+test('oversized aggregates fall back to complete separate reads',async({page})=>{
+ const mock=await setup(page,{count:2,pending:true});mock.oversize.add('inbox');mock.tooBig.add('detail');
+ let mark=mock.queries.length;await page.getByRole('button',{name:'Refresh notifications'}).click();await page.waitForTimeout(800);
+ expect(mock.kinds(mark)).toEqual(['inbox','latest','unread','preferences','list']);await expect(page.locator('.notification-row')).toHaveCount(1);await expect(page.locator('#unread-count')).toHaveText('1');
+ await page.getByRole('button',{name:'Sent',exact:false}).click();await page.waitForTimeout(800);mark=mock.queries.length;await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
+ await expect(page.locator('.recipient-status > div')).toHaveCount(3);expect(mock.kinds(mark)).toEqual(['detail','note','recipients','references']);
+ await expect(page.locator('.references a')).toHaveCount(1);
+});
+test('an incomplete fallback recipient list is reported, never shown partially',async({page})=>{
+ const mock=await setup(page,{pending:true});mock.oversize.add('detail');
+ await page.route('**/api/context/query',async route=>{const sql=route.request().postDataJSON().sql;if(classify(sql)==='recipients')await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({columns:['id'],rows:[['recp00000000001']],truncated:false})});else await route.fallback();});
+ await page.getByRole('button',{name:'Sent',exact:false}).click();await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
+ await expect(page.locator('#detail')).toContainText('Recipient details are incomplete');await expect(page.locator('.recipient-status')).toHaveCount(0);
+});
+test('sender sees every recipient while a recipient sees only their own row and actions',async({page})=>{
+ const mock=await setup(page,{count:2,pending:true});
+ await page.getByRole('heading',{name:'Notification 2'}).click();await expect(page.locator('.detail-title')).toHaveText('Notification 2');
+ await expect(page.locator('.recipient-status')).toHaveCount(0);await expect(page.getByRole('button',{name:'Acknowledge',exact:true})).toBeVisible();
+ const detail=mock.queries.filter(query=>query.kind==='detail').at(-1).sql;expect(detail).not.toContain('SELECT *');expect(detail).toContain("'revision',revision");
+ await page.getByRole('button',{name:'Sent',exact:false}).click();await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
+ await expect(page.locator('.recipient-status > div')).toHaveCount(3);await expect(page.locator('.actions')).toHaveCount(0);
+ await page.getByRole('button',{name:'Inbox',exact:false}).click();await page.getByRole('heading',{name:'Notification 2'}).click();
+ await page.getByRole('button',{name:'Archive',exact:true}).click();await expect(page.getByRole('button',{name:'Move to inbox',exact:true})).toBeVisible();
+ expect(mock.writes.at(-1).path).toMatch(/recp00000000002$/);
+});
+test('maximum-length multibyte content keeps a character-safe excerpt and the full detail',async({page})=>{
+ const body='😀'.repeat(19990)+' éñd',subject='界'.repeat(200);
+ await setup(page,{body,subject});
+ const excerpt=await page.locator('.notification-row .excerpt').textContent();expect([...excerpt]).toHaveLength(140);expect(excerpt).toBe('😀'.repeat(140));
+ await page.getByRole('heading',{name:subject}).click();await expect(page.locator('article')).toContainText('éñd');
+ expect([...(await page.locator('article').textContent()).trim()].length).toBe(19994);
+});
+test('another tab’s alert pause reaches this tab on the next refresh',async({page})=>{
+ const mock=await setup(page,{permission:'granted'});await expect(page.locator('#alerts')).toHaveText('Desktop alerts enabled');
+ mock.setPreference({id:'prefs0000000001',alerts_paused_until:new Date(Date.now()+1800000).toISOString(),revision:2});
+ const mark=mock.queries.length;await page.evaluate(()=>window.inboxSignal());await expect(page.locator('#alerts')).toHaveText('Desktop alerts paused');
+ expect(mock.kinds(mark)).toEqual(['inbox']);
+ mock.addNotification();await page.getByRole('button',{name:'Refresh notifications'}).click();await expect(page).toHaveTitle('(2) NotifyContext');expect(await page.evaluate(()=>window.notificationCalls.length)).toBe(0);
+});
+test('directory and status refresh on schedule and immediately after the user’s own status change',async({page})=>{
+ await page.clock.install();const mock=await setup(page);await settle(page);
+ expect(mock.kinds().filter(kind=>kind==='directory')).toHaveLength(1);
+ const inboxReads=()=>mock.kinds().filter(kind=>kind==='inbox').length,base=inboxReads();
+ for(let i=1;i<=4;i++){await page.clock.fastForward(60000);await expect.poll(inboxReads).toBe(base+i);}
+ expect(mock.kinds().filter(kind=>kind==='directory')).toHaveLength(1);
+ await page.clock.fastForward(60000);await expect.poll(()=>mock.kinds().filter(kind=>kind==='directory').length).toBe(2);
+ await page.locator('#settings').click();await page.getByLabel('Status',{exact:true}).selectOption('busy');await page.getByRole('button',{name:'Save status'}).click();
+ await expect(page.locator('#my-status')).toHaveText('Busy');expect(mock.kinds().filter(kind=>kind==='directory')).toHaveLength(3);
 });

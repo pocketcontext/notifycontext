@@ -172,3 +172,54 @@ integration, pending-recipient, portable skill, deployment, populated backup,
 maintenance, client (15), OAuth (15), deployment-workflow (10) and entrypoint
 checks passed against server `976ddf71a4734530adefe4a56633658a0894b449`. Browser UI
 source was unchanged; frontend and container checks were not rerun locally.
+
+## Rate-limit recovery, consolidated reads and server 934a63a — 29 October 2026
+
+Production readers saw PocketBase's "Too Many Requests" in the detail panel. The
+`/api/context/` rule allows 60 requests per 10 seconds per `RealIP()`, and its 429
+carries no `Retry-After`. The browser previously sent 15 SQL requests at startup,
+6 per refresh, 3 per detail and about 15 per recipient action.
+
+The browser now sends one refresh query returning the list page (explicit columns,
+140-character SQL excerpt, has-more probe), global unread count, latest inbox IDs
+and preferences; one detail query with independently aggregated recipients and
+references; and a joined directory/status read at startup, every five minutes,
+after an unknown sender and after its own status change. Oversized aggregates fall
+back to separate reads; incomplete recipient lists are reported, never shown as
+complete. Measured against the real server: startup 2, steady refresh 1, detail 1,
+recipient action 2–3, direct-link startup 3. Triggers share one coalesced queue
+(one in flight, one pending, 2-second background minimum). A 429 starts a shared
+cooldown honoring `Retry-After`, otherwise 2–60 seconds of jittered exponential
+backoff; the selected detail reopens after recovery for the same session and
+selection. Writes are never retried automatically.
+
+Server adoption: PocketContext `934a63a13c3fa97be5e5f0e0329b793375bc8f08`, built
+from a clean detached worktree (`vcs.modified=false`), runs synchronous filtered
+snapshots: a requester's copy is reused until any committed write. Background
+generations, `trackChanges` and `maxConcurrentPerRequester` remain unset; the
+schema reports the last as 0. Migration `1790300500_lookup_indexes.js` adds ordinary
+`notification_recipients(notification,recipient)`,
+`notification_references(notification,created,id)` and
+`notifications(sender,created,id)` indexes, because snapshot index copying skips
+partial indexes. On 20 synthetic users, 3,000 notifications and 11,051 recipient
+rows, cold snapshot builds fell from a 5,003 ms timeout to about 430 ms for the
+heaviest user and from about 2.4 s to 180 ms for the median user; warm reads stayed
+about 3 ms over HTTP. Upgrade startup took under 0.4 seconds. `trackChanges` helped
+only status writes and doubled write latency, so it stays off.
+
+All README Python suites passed against 934a63a with synthetic isolated databases,
+including the new `tests/snapshot_freshness.py` (reuse, then fresh state and
+authorization after publication, read, acknowledge, archive, unarchive, withdrawal
+and Google claim; sender, recipient, unrelated-user and pending-address privacy)
+and `tests/lookup_indexes.py` (populated upgrade, unchanged partial indexes, plans,
+down migration). The 39 Chromium tests, production build and actual-server browser
+workflow passed against both 976ddf71 and 934a63a, including privacy of the replayed
+detail SQL, read-after-write, 100 maximum-length multibyte acknowledgements and a
+real rate-limit 429 with automatic detail recovery. A locally built image passed
+config, smoke, populated restore and primary-S3 recovery; actionlint was clean.
+Local runs used Node.js 26 and do not replace native CI on both architectures.
+
+Known limits: cooldowns are per tab and shared IP buckets are not coordinated;
+with `maxConcurrent` 4, many recipients refreshing after one write rebuild
+snapshots repeatedly (no worse than the previous pin). The live trusted-proxy
+header and effective rate-limit settings were not inspected from this host.
