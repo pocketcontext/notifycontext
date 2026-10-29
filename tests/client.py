@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Behavioral tests: complete backlog, safe writes, partial results and SQL quoting."""
+import contextlib
+import http.server
 import importlib.util
+import io
 import json
 import unittest
 from pathlib import Path
+import threading
 from unittest.mock import patch
 
 from notifycontext_client import cli as nc
@@ -149,6 +153,86 @@ class ClientTest(unittest.TestCase):
             with self.assertRaises(nc.Fail):
                 nc.run(nc.parse(['publish', '{"recipients":["recipient000001"]}']))
             must.assert_not_called()
+
+
+class RateLimitTest(unittest.TestCase):
+    """send() against a real local HTTP server; sleeping and jitter are patched out."""
+    def serve(self, responses):
+        hits = []
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def handle_one(self):
+                length = int(self.headers.get('Content-Length') or 0)
+                hits.append((self.command, self.path, self.rfile.read(length)))
+                status, headers = responses.pop(0) if responses else (200, {})
+                body = json.dumps({'message': 'Too Many Requests.'} if status == 429 else {'ok': len(hits)}).encode()
+                self.send_response(status)
+                for key, value in headers.items():
+                    self.send_header(key, value)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            do_GET = do_POST = do_PATCH = handle_one
+            def log_message(self, *args):
+                pass
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return {'url': f'http://127.0.0.1:{server.server_port}'}, hits
+
+    def send(self, cfg, *args, budget=None, clock=None):
+        sleeps, now = [], [0.0]
+        def sleep(seconds):
+            sleeps.append(round(seconds, 3))
+            now[0] += seconds
+        env = {} if budget is None else {'NOTIFYCONTEXT_RATE_LIMIT_WAIT': budget}
+        with patch.dict(nc.os.environ, env), patch.object(nc.time, 'sleep', side_effect=sleep), patch.object(nc.time, 'monotonic', side_effect=lambda: now[0]), patch.object(nc.random, 'random', return_value=1.0), patch.object(nc.time, 'time', return_value=clock or 0), contextlib.redirect_stderr(io.StringIO()) as err:
+            result = nc.send(cfg, *args)
+        return result, sleeps, err.getvalue()
+
+    def test_backs_off_within_one_window_then_succeeds(self):
+        cfg, hits = self.serve([(429, {})] * 5)
+        (status, data), sleeps, err = self.send(cfg, 'POST', '/api/context/query', {'sql': 'SELECT 1'})
+        self.assertEqual((status, data), (200, {'ok': 6}))
+        self.assertEqual(sleeps, [1, 2, 4, 8, 11])
+        self.assertEqual(len(hits), 6)
+        self.assertTrue(all(hit == hits[0] for hit in hits))
+        self.assertEqual(err.count('rate limited'), 5)
+
+    def test_retry_after_seconds_and_dates_are_capped(self):
+        cfg, _ = self.serve([(429, {'Retry-After': '3'}), (429, {'Retry-After': '900'}), (429, {'Retry-After': 'Thu, 01 Jan 1970 00:00:20 GMT'})])
+        (status, _), sleeps, _ = self.send(cfg, 'GET', '/x', budget='200', clock=10)
+        self.assertEqual(status, 200)
+        self.assertEqual(sleeps, [3.5, 60.5, 10.5])
+
+    def test_budget_exhaustion_returns_429_with_guidance(self):
+        cfg, hits = self.serve([(429, {})] * 20)
+        (status, _), sleeps, _ = self.send(cfg, 'GET', '/x')
+        self.assertEqual(status, 429)
+        self.assertLessEqual(sum(sleeps), 60)
+        self.assertEqual(len(hits), len(sleeps) + 1)
+        with patch.object(nc, 'call', return_value=(429, {'message': 'Too Many Requests.'})), self.assertRaises(nc.Fail) as failure:
+            nc.must(cfg, 'GET', '/x')
+        self.assertEqual(failure.exception.code, 1)
+        self.assertIn('still rate limited', str(failure.exception))
+
+    def test_disabled_budget_and_other_errors_do_not_retry(self):
+        for budget, status in (('0', 429), (None, 500), (None, 503)):
+            with self.subTest(budget=budget, status=status):
+                cfg, hits = self.serve([(status, {'Retry-After': '1'})])
+                (got, _), sleeps, _ = self.send(cfg, 'GET', '/x', budget=budget)
+                self.assertEqual((got, sleeps, len(hits)), (status, [], 1))
+        with patch.dict(nc.os.environ, {'NOTIFYCONTEXT_RATE_LIMIT_WAIT': 'soon'}), self.assertRaises(nc.Fail) as failure:
+            nc.rate_limit_budget()
+        self.assertEqual(failure.exception.code, 2)
+
+    def test_rejected_write_is_resent_once_with_the_same_body(self):
+        cfg, hits = self.serve([(429, {})])
+        (status, _), _, _ = self.send(cfg, 'PATCH', '/api/collections/notification_recipients/records/r1', {'action': 'read', 'expected_revision': 3})
+        self.assertEqual(status, 200)
+        self.assertEqual([hit[0] for hit in hits], ['PATCH', 'PATCH'])
+        self.assertEqual(json.loads(hits[1][2]), {'action': 'read', 'expected_revision': 3})
 
 
 if __name__ == '__main__': unittest.main()

@@ -232,3 +232,24 @@ but a refresh plus detail read doubled them to 16 (2.6 s). At 8 slots the same
 load needed eight builds (1.3–1.4 s), using about 40 MB of temporary snapshot
 files instead of 16–19 MB and peak memory of 129–131 MB within the 512 MB
 container. `maxConcurrent` is now 8; the schema snapshots record it.
+
+## Rate-limit backoff for the client and reader — 29 October 2026
+
+PocketBase v0.40.4 limits per `RealIP()` in fixed whole-second windows that refill
+completely (`/api/context/` within about 10 seconds) and does not charge rejected
+requests or send `Retry-After`. The reader's backoff without a hint is now 2, 4, 8,
+then 11 seconds (50–100% jitter) instead of growing to 60, and `Retry-After` is
+capped at 60 seconds instead of 300. The CLI client's `send()` now retries HTTP 429,
+including writes, which both limiters reject before execution: `Retry-After` when
+present (capped at 60 s), otherwise 1, 2, 4, 8, 11 seconds with jitter, within a
+60-second budget (`NOTIFYCONTEXT_RATE_LIMIT_WAIT`, 0 disables), with one stderr
+line per wait. Other statuses and transport failures are not retried.
+
+`tests/client.py` (20) checks the sequence, hints, cap, exhausted budget, disabled
+budget, no 5xx retry and a resent write against a local HTTP server.
+`tests/rate_limit.py` exhausts a real server's enabled limits, then verifies that
+the installed client's query and backlog succeed after retrying, a zero budget
+fails at once, and no recipient state changes. A new Chromium test checks the
+reader's 2, 4, 8, 11, 11, 11 second waits. All README Python suites, 40 Chromium
+tests, the production build and the actual-server browser workflow passed against
+934a63a with synthetic isolated data.

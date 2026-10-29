@@ -131,6 +131,7 @@ python3 tests/skill.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/deploy.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/backup.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/client.py
+python3 tests/rate_limit.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/oauth.py
 python3 tests/deploy_workflow.py
 ```

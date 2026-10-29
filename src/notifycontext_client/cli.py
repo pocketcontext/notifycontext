@@ -5,6 +5,7 @@ Configuration comes from three environment variables:
   NOTIFYCONTEXT_URL             server address, for example https://notify.example.com
   NOTIFYCONTEXT_USER_EMAIL     email of an account in the `users` collection
   NOTIFYCONTEXT_USER_PASSWORD  password of that account (optional with Google login)
+Optional: NOTIFYCONTEXT_RATE_LIMIT_WAIT  seconds to keep retrying HTTP 429 (default 60; 0 disables)
 
 Exit codes: 0 success; 1 HTTP or transport error; 2 usage or configuration error;
 3 `check` found schema differences; 4 HTTP 409 (read the record again, then retry).
@@ -12,12 +13,14 @@ Exit codes: 0 success; 1 HTTP or transport error; 2 usage or configuration error
 import argparse
 from datetime import datetime, timezone
 import base64
+import email.utils
 import hashlib
 import http.client
 import http.server
 import json
 import os
 from pathlib import Path
+import random
 import re
 import secrets
 import sys
@@ -31,6 +34,9 @@ import webbrowser
 ENV = ['NOTIFYCONTEXT_URL', 'NOTIFYCONTEXT_USER_EMAIL', 'NOTIFYCONTEXT_USER_PASSWORD']
 SCHEMA_FILE = Path(__file__).with_name('schema.json')
 TIMEOUT = 30
+RATE_LIMIT_WAIT = 60.0
+BACKOFF_MAX = 11.0
+RETRY_AFTER_MAX = 60.0
 USER_AGENT = 'NotifyContext/1.0'
 hidden = []  # The password and tokens. say() masks them in everything it prints.
 
@@ -141,23 +147,64 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 opener = urllib.request.build_opener(NoRedirect)
 
 
+def rate_limit_budget():
+    """Seconds to keep retrying HTTP 429 responses; NOTIFYCONTEXT_RATE_LIMIT_WAIT=0 fails at once."""
+    value = os.environ.get('NOTIFYCONTEXT_RATE_LIMIT_WAIT', '').strip()
+    try:
+        return max(0.0, float(value)) if value else RATE_LIMIT_WAIT
+    except ValueError:
+        raise Fail(2, 'NOTIFYCONTEXT_RATE_LIMIT_WAIT must be a number of seconds.') from None
+
+
+def retry_delay(retry_after, attempt):
+    """Retry-After (seconds or HTTP date, capped at 60 s), else 1, 2, 4, 8, 11 s with 50-100% jitter.
+
+    PocketBase's limiter refills its whole fixed window within about 10 s and rejected requests
+    cost nothing, so waiting longer than one window only delays recovery."""
+    value = str(retry_after or '').strip()
+    hinted = None
+    if value.isdigit():
+        hinted = float(value)
+    elif value:
+        try:
+            hinted = email.utils.parsedate_to_datetime(value).timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            hinted = None
+    if hinted is not None:
+        return min(RETRY_AFTER_MAX, max(0.0, hinted)) + random.random() * 0.5
+    return min(BACKOFF_MAX, 2 ** attempt) * (0.5 + random.random() / 2)
+
+
 def send(cfg, method, path, body=None, token=None, timeout=TIMEOUT):
-    """Send one request. Returns (status, parsed JSON body, or the text when it is not JSON)."""
+    """Send one request. Returns (status, parsed JSON body, or the text when it is not JSON).
+
+    HTTP 429 is retried, writes included: both server limiters reject before a request runs."""
     headers = {'Content-Type': 'application/json', 'User-Agent': USER_AGENT}
     if token:
         headers['Authorization'] = token
     data = None if body is None else json.dumps(body).encode()
-    request = urllib.request.Request(cfg['url'] + path, data=data, headers=headers, method=method)
-    try:
-        with opener.open(request, timeout=timeout) as response:
-            status, raw = response.status, response.read()
-    except urllib.error.HTTPError as error:
-        status, raw = error.code, error.read()
-        if 300 <= status < 400:
-            raise Fail(1, f'HTTP {status}: the server redirects to {error.headers.get("Location")}. Set NOTIFYCONTEXT_URL to the final address.')
-    except (OSError, ValueError, http.client.HTTPException) as error:
-        reason = getattr(error, 'reason', error)
-        raise Fail(1, f'cannot reach {cfg["url"]}: {reason}')
+    deadline, attempt = None, 0
+    while True:
+        request = urllib.request.Request(cfg['url'] + path, data=data, headers=headers, method=method)
+        try:
+            with opener.open(request, timeout=timeout) as response:
+                status, raw = response.status, response.read()
+        except urllib.error.HTTPError as error:
+            status, raw = error.code, error.read()
+            if 300 <= status < 400:
+                raise Fail(1, f'HTTP {status}: the server redirects to {error.headers.get("Location")}. Set NOTIFYCONTEXT_URL to the final address.')
+            if status == 429:
+                deadline = time.monotonic() + rate_limit_budget() if deadline is None else deadline
+                delay = retry_delay(error.headers.get('Retry-After'), attempt)
+                if time.monotonic() + delay <= deadline:
+                    attempt += 1
+                    print(f'notifycontext: rate limited by the server; retrying {method} {path} in {delay:.1f}s', file=sys.stderr)
+                    time.sleep(delay)
+                    continue
+        except (OSError, ValueError, http.client.HTTPException) as error:
+            reason = getattr(error, 'reason', error)
+            raise Fail(1, f'cannot reach {cfg["url"]}: {reason}')
+        break
     text = raw.decode('utf-8', 'replace')
     try:
         return status, json.loads(text) if text else None
@@ -351,6 +398,8 @@ def must(cfg, method, path, body=None):
     conflict = status == 409
     if conflict:
         lines.append('HTTP 409: revision or submission conflict. Read current state and check the original payload before retrying; do not change a submission key to bypass a conflict.')
+    if status == 429:
+        lines.append(f'HTTP 429: still rate limited after retrying for up to {rate_limit_budget():g}s. Other clients may share this address; wait, then run the command again.')
     raise Fail(4 if conflict else 1, '\n'.join(lines))
 
 

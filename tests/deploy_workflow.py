@@ -118,6 +118,7 @@ class DeploymentTests(unittest.TestCase):
         if APP == 'notifycontext':
             self.assertIn('notifycontext/tests/snapshot_freshness.py --binary', application)
             self.assertIn('notifycontext/tests/lookup_indexes.py --binary', application)
+            self.assertIn('notifycontext/tests/rate_limit.py --binary', application)
         check = PUBLICATION.split('  check:', 1)[1].split('  tests:', 1)[0]
         self.assertIn('runner: ubuntu-24.04-arm', check)
         self.assertIn('runner: ubuntu-24.04', check)

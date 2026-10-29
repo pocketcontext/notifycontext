@@ -400,6 +400,16 @@ test('a 429 without Retry-After backs off, stays friendly and re-opens the selec
  await expect(page.locator('#notice')).toBeHidden();await expect(page.locator('#connection')).toContainText('Connected');
  expect(mock.kinds(mark).sort()).toEqual(['detail','inbox']);expect(mock.writes).toHaveLength(0);
 });
+test('repeated 429s without Retry-After retry within one rate-limit window',async({page})=>{
+ await page.clock.install();await page.addInitScript(()=>{Math.random=()=>0.999;});const mock=await setup(page);await settle(page);let limited=6;
+ await page.route('**/api/context/query',async route=>{if(limited>0 && classify(route.request().postDataJSON().sql)==='inbox'){limited--;await route.fulfill({status:429,contentType:'application/json',body:JSON.stringify({status:429,message:'Too Many Requests.',data:{}})});}else await route.fallback();});
+ await page.getByRole('button',{name:'Refresh notifications'}).click();
+ // Waits grow 2, 4, 8 s, then stay at the 11 s cap, never beyond one window.
+ const steps=[2,4,8,11,11,11];
+ for(let i=0;i<steps.length;i++){await expect.poll(()=>limited).toBe(5-i);await page.getByRole('button',{name:'Refresh notifications'}).click();const seconds=Number((await page.locator('#notice').textContent()).match(/Retrying in (\d+)s/)[1]);expect(seconds).toBeLessThanOrEqual(steps[i]);expect(seconds).toBeGreaterThanOrEqual(steps[i]-1);if(i<steps.length-1)await page.clock.fastForward(steps[i]*1000+100);}
+ limited=0;await page.clock.fastForward(11100);
+ await expect(page.locator('#connection')).toContainText('Connected');await expect(page.locator('#notice')).toBeHidden();
+});
 test('a 429 with Retry-After holds every refresh trigger until the hinted time',async({page})=>{
  const mock=await setup(page);let limited=1,limitedAt=0;
  await page.route('**/api/context/query',async route=>{if(limited>0 && classify(route.request().postDataJSON().sql)==='inbox'){limited--;limitedAt=Date.now();await route.fulfill({status:429,headers:{'Retry-After':'3'},contentType:'application/json',body:JSON.stringify({status:429,message:'Too many concurrent snapshot reads for this account',data:{}})});}else await route.fallback();});

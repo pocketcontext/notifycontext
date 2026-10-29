@@ -63,7 +63,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden && pb.auth
 // The /api/context/ rate limit counts every SQL request per client IP (60 per 10 s in deploy.js), so
 // background triggers share one queue: one refresh in flight, at most one pending, automatic runs at
 // least minRefresh apart. A 429 pauses every SQL read until the cooldown ends.
-const minRefresh=2000, coalesceDelay=250, directoryMaxAge=300000, directoryUnknownAge=60000, backoffBase=2000, backoffMax=60000, retryAfterMax=300000;
+const minRefresh=2000, coalesceDelay=250, directoryMaxAge=300000, directoryUnknownAge=60000, backoffBase=2000, backoffMax=11000, retryAfterMax=60000;
 let timer, searchTimer, refreshTimer, refreshAt=Infinity, refreshBusy=false, queued=null, lastRefresh=0, cooldownUntil=0, cooldownTimer, backoffStep=0, detailRetry=null, listGeneration=0, realtimeGeneration=0, realtimeStarted=false, realtimeToken='';
 // urgent: user navigation, manual refresh or own write; skips coalescing and the minimum interval, never the cooldown.
 function requestRefresh({manual=false,urgent=false,visible=false,epoch=sessionEpoch}={}) {
@@ -90,7 +90,8 @@ async function runRefresh() {
 }
 const busyMessage=()=>`NotifyContext is busy. Retrying in ${Math.max(1,Math.ceil((cooldownUntil-Date.now())/1000))}s.`;
 const busy=()=>{armRecovery();return Object.assign(new Error(busyMessage()),{busy:true});};
-// Retry-After is delta-seconds or an HTTP date. Without it, back off 2, 4, 8 … 60 s with 50–100% jitter.
+// Retry-After is delta-seconds or an HTTP date, capped at 60 s. Without it, back off 2, 4, 8, 11 s with 50–100% jitter:
+// PocketBase's limiter refills its whole fixed window within about 10 s (whole seconds), and rejected requests cost nothing.
 function enterCooldown(retryAfter) {
   const value=String(retryAfter??'').trim(),hinted=!value?NaN:/^\d+$/.test(value)?Number(value)*1000:Date.parse(value)-Date.now();
   const wait=Number.isFinite(hinted)?Math.min(retryAfterMax,Math.max(0,hinted))+Math.random()*500:Math.min(backoffMax,backoffBase*2**backoffStep)*(0.5+Math.random()/2);

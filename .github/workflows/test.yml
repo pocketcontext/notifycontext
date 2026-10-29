@@ -78,6 +78,8 @@ jobs:
         run: python3 notifycontext/tests/backup.py --binary pocketcontext/bin/pocketcontext
       - name: Test client backlog behavior
         run: python3 notifycontext/tests/client.py
+      - name: Test client rate-limit retry against the real limiter
+        run: python3 notifycontext/tests/rate_limit.py --binary pocketcontext/bin/pocketcontext
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
