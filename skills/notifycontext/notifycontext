@@ -4,7 +4,7 @@
 # dependencies = ["notifycontext-client"]
 #
 # [tool.uv.sources]
-# notifycontext-client = { git = "https://github.com/pocketcontext/notifycontext.git", rev = "ef5a7e1e67282ea5c91f4c842086584f61d00831" }
+# notifycontext-client = { git = "https://github.com/pocketcontext/notifycontext.git", rev = "e0a56cbe0cf228028d38c1854086ebe793465643" }
 # ///
 """Standalone launcher for the pinned NotifyContext client."""
 from notifycontext_client.cli import main
