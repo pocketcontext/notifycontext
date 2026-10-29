@@ -70,6 +70,10 @@ jobs:
         run: python3 notifycontext/tests/security.py --binary pocketcontext/bin/pocketcontext
       - name: Test private inbox realtime and transaction rollback
         run: python3 notifycontext/tests/realtime.py --binary pocketcontext/bin/pocketcontext
+      - name: Test snapshot reuse read-after-write and privacy
+        run: python3 notifycontext/tests/snapshot_freshness.py --binary pocketcontext/bin/pocketcontext
+      - name: Test lookup-index upgrade and query plans
+        run: python3 notifycontext/tests/lookup_indexes.py --binary pocketcontext/bin/pocketcontext
       - name: Test populated backup recovery
         run: python3 notifycontext/tests/backup.py --binary pocketcontext/bin/pocketcontext
       - name: Test client backlog behavior

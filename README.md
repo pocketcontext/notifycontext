@@ -27,6 +27,26 @@ retain the last successful count. Opening a notification still does not mark it 
 
 See [data model](docs/data-model.md), [security](docs/security.md), [validation evidence](docs/validation.md) and [deployment](docs/deployment.md).
 
+## SQL snapshots
+
+The pinned server's synchronous filtered snapshots give each account a private SQL
+copy of the rows its policies admit. The copy is reused while the source database is
+unchanged; any committed write, including publications, recipient actions, withdrawals,
+Google claims and status or account changes, invalidates every retained copy first.
+A read after a confirmed write therefore observes it, with current authorization.
+Each cold build still exports the account's whole visible dataset, even for a one-row
+query; warm reads skip that export. At most `maxConcurrent` (four) copies are retained,
+least recently used first, in private server temporary files.
+
+Snapshots copy ordinary source indexes over exported columns, never partial or
+expression indexes. Migration `1790300500_lookup_indexes.js` therefore adds ordinary
+indexes for recipients and references by notification and a sender's notifications by
+date. They serve the export policies, hook lookups, detail reads and Sent view.
+Background snapshots, `trackChanges` and `maxConcurrentPerRequester` are deliberately
+not configured: background reads are eventually consistent, and per-account admission
+would reject concurrent reads from several tabs with HTTP 429. Measurements are in
+[validation evidence](docs/validation.md).
+
 ## Run locally
 
 Build the exact server commit in `POCKETCONTEXT_VERSION` in an isolated PocketContext checkout using the Go version in its `go.mod`, CGO and a C compiler:
@@ -102,6 +122,8 @@ Use the pinned binary and synthetic isolated databases:
 python3 tests/integration.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/security.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/realtime.py --binary /absolute/path/to/pinned/pocketcontext
+python3 tests/snapshot_freshness.py --binary /absolute/path/to/pinned/pocketcontext
+python3 tests/lookup_indexes.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/auth.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/oauth_integration.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/pending_recipients.py --binary /absolute/path/to/pinned/pocketcontext
@@ -117,7 +139,7 @@ Frontend browser commands and actual results are recorded in [validation evidenc
 
 ## Infrastructure provenance
 
-The application domain model is independent. Authentication, Google login, account lifecycle, container replication and locked deployment patterns were adapted from RaiseContext `d9e337a05fddfdc26e082f8e1a1e3b0efb0c0e52`; filtered-snapshot patterns were inspected in ChatContext `7fac3712007b8d123620f46eb93888bf8e51118b`. The server pin is `976ddf71a4734530adefe4a56633658a0894b449`.
+The application domain model is independent. Authentication, Google login, account lifecycle, container replication and locked deployment patterns were adapted from RaiseContext `d9e337a05fddfdc26e082f8e1a1e3b0efb0c0e52`; filtered-snapshot patterns were inspected in ChatContext `7fac3712007b8d123620f46eb93888bf8e51118b`. The server pin is `934a63a13c3fa97be5e5f0e0329b793375bc8f08`.
 
 Source is public at https://github.com/pocketcontext/notifycontext. The public application is deployed at https://notify.pocketcontext.com; see [deployment status](DEPLOYMENT.md) for verified release evidence and remaining setup.
 

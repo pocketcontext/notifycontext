@@ -69,6 +69,13 @@ checks every referenced remote file before installation. ONCE v0.3.3 waits a fix
 (`NOTIFYCONTEXT_VERIFY_CONCURRENCY`) on every start. Preserve `maintenance.json`
 and a consistent `auxiliary.db` separately for frozen recovery.
 
+Migration `1790300500_lookup_indexes.js` only adds three ordinary indexes in one
+transaction. On a synthetic 3,000-notification, 11,000-recipient database the
+upgrade start took 0.14–0.32 seconds, within ONCE's fixed wait. A frozen start
+refuses this pending migration, as with any migration; apply it on a writable start.
+Retained SQL snapshots (at most four private copies) live under the container's
+temporary directory, not `/storage`, and are never reused after a restart.
+
 For disaster recovery, stop/fence the existing writer, preserve the failed volume,
 restore into a separate empty volume, and validate authenticated access and complete
 notification/recipient/reference/event state before enabling one writer. Litestream

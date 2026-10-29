@@ -115,6 +115,9 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn('  push:', triggers)
         self.assertNotIn('  pull_request:', triggers)
         self.assertIn('ubuntu-24.04-arm', application)
+        if APP == 'notifycontext':
+            self.assertIn('notifycontext/tests/snapshot_freshness.py --binary', application)
+            self.assertIn('notifycontext/tests/lookup_indexes.py --binary', application)
         check = PUBLICATION.split('  check:', 1)[1].split('  tests:', 1)[0]
         self.assertIn('runner: ubuntu-24.04-arm', check)
         self.assertIn('runner: ubuntu-24.04', check)
