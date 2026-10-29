@@ -223,3 +223,12 @@ Known limits: cooldowns are per tab and shared IP buckets are not coordinated;
 with `maxConcurrent` 4, many recipients refreshing after one write rebuild
 snapshots repeatedly (no worse than the previous pin). The live trusted-proxy
 header and effective rate-limit settings were not inspected from this host.
+
+## Snapshot concurrency 8 — 29 October 2026
+
+With the consolidated browser reads, eight synthetic users refreshing after one
+write needed the minimum eight snapshot builds at `maxConcurrent` 4 (1.3–1.7 s),
+but a refresh plus detail read doubled them to 16 (2.6 s). At 8 slots the same
+load needed eight builds (1.3–1.4 s), using about 40 MB of temporary snapshot
+files instead of 16–19 MB and peak memory of 129–131 MB within the 512 MB
+container. `maxConcurrent` is now 8; the schema snapshots record it.
