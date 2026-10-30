@@ -263,3 +263,12 @@ recovery-comparison and object-storage checks, the 40 Chromium tests, the produc
 build and the actual-server browser workflow (including the real rate-limit 429 and
 detail recovery) passed with synthetic isolated data. Local runs used Node.js 26.
 Container gates were not run locally (no Docker).
+
+## Markdown links open in a new tab — 30 October 2026
+
+Sanitized Markdown `http(s)` links in notification bodies, acknowledgement notes and
+the compose preview now open in a new tab with `rel="noopener noreferrer"`, matching
+reference links, so the open record and acknowledgement drafts survive. `mailto:` and
+in-app links are unchanged; `javascript:` links remain removed. The 40 Chromium tests,
+the production build and the actual-server browser workflow passed against a clean
+416841c build with synthetic isolated data, using Node.js 26 locally.

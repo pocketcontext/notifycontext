@@ -2,6 +2,10 @@ import {marked} from 'marked';
 import DOMPurify from 'dompurify';
 export const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const sqlQuote = value => "'" + String(value).replaceAll("'", "''") + "'";
+// Content links open in a new tab so drafts and the open record survive; in-app and mailto links stay put.
+DOMPurify.addHook('afterSanitizeAttributes', node => {
+  if (node.tagName === 'A' && /^https?:/i.test(node.getAttribute('href') || '')) {node.setAttribute('target','_blank');node.setAttribute('rel','noopener noreferrer');}
+});
 export function markdown(text) {
   // Remote images can leak private content viewing; raw HTML is never interpreted.
   const renderer = new marked.Renderer();

@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 const user='user00000000001',sender='user00000000002';
 const jwt=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:user,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
 const now=new Date().toISOString();
-const initial={id:'note00000000001',sender,subject:'Supplier renewal ready',body_markdown:'## Review requested\n\nPlease review the [handoff](https://example.com).\n\n| Item | Status |\n| --- | --- |\n| Quote | Ready |\n\n```js\nconst approved = false;\n```\n\n<img src=x onerror="window.attacked=true">\n\n[bad](javascript:window.attacked=true)',kind:'review_requested',ack_required:true,due_at:'',withdrawn_at:'',withdrawal_reason:'',revision:1,created:now};
+const initial={id:'note00000000001',sender,subject:'Supplier renewal ready',body_markdown:'## Review requested\n\nPlease review the [handoff](https://example.com).\n\n| Item | Status |\n| --- | --- |\n| Quote | Ready |\n\n```js\nconst approved = false;\n```\n\n<img src=x onerror="window.attacked=true">\n\n[bad](javascript:window.attacked=true)\n\n[mail](mailto:colleague@example.com)',kind:'review_requested',ack_required:true,due_at:'',withdrawn_at:'',withdrawal_reason:'',revision:1,created:now};
 const users={[user]:'Vamsi',[sender]:'Jack'};
 // Query shapes: consolidated refresh, consolidated detail, joined directory, and the separate fallback/legacy reads.
 const classify=sql=>sql.startsWith('WITH page')?'inbox':sql.includes(') AS recipients')?'detail':sql.includes('FROM user_directory d LEFT JOIN')?'directory':sql.includes('recipient_total') || sql.startsWith('SELECT * FROM notifications')?'note':sql.includes('FROM notification_recipients r LEFT JOIN')?'recipients':sql.includes('FROM notification_references')?'references':sql.includes('FROM user_directory')?'users':sql.includes('FROM user_status')?'statuses':sql.includes('FROM notification_preferences')?'preferences':sql.startsWith('SELECT n.id, n.created')?'latest':sql.includes('count(*) AS total')?'unread':'list';
@@ -97,6 +97,8 @@ test('safe Markdown detail and explicit recipient actions',async({page})=>{
   await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
   await expect(page.locator('article table')).toBeVisible();await expect(page.locator('article pre')).toHaveText('const approved = false;\n');
   expect(await page.evaluate(()=>window.attacked)).toBeUndefined();await expect(page.locator('article img')).toHaveCount(0);await expect(page.locator('article a[href^="javascript:"]')).toHaveCount(0);
+  const handoff=page.locator('article a',{hasText:'handoff'});await expect(handoff).toHaveAttribute('target','_blank');await expect(handoff).toHaveAttribute('rel','noopener noreferrer');
+  await expect(page.locator('article a[href^="mailto:"]')).not.toHaveAttribute('target',/./);
   expect(writes).toHaveLength(0);
   await page.getByLabel('Optional acknowledgement note').fill('Draft survives marking read.');
   await page.getByRole('button',{name:'Mark read',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);expect(writes[0].body.action).toBe('read');
