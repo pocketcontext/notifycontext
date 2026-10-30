@@ -26,3 +26,49 @@ Expired or withdrawn pending rows never claim. Claimed rows never follow email c
 Pending/expired state is derived from an empty recipient and claim_expires_at, with withdrawal taking precedence in presentation. Pending addresses and expiry are visible only to the sender; after claim the linked recipient can see their own row. No other colleague can inspect or claim an address using ordinary REST updates.
 
 Canonical submission payloads retain sorted normalized email inputs independently of their later account resolution, so an identical retry after signup or claim returns the original notification. Empty email arrays preserve the previous ID-only canonical format. Changing from an ID to an email or otherwise changing addressing inputs under an existing key is a conflict, even if the new input would resolve to the same person.
+
+## Sender feedback inbox
+
+`notification_feedback` is server-created, sender-private state, unique per notification:
+notification, user (original sender), latest_recipient, latest_at, activity_version,
+read_version, read_at, archived_at, revision and created/updated. Filtered SQL admits
+only `user = :requester`; business REST reads and client create/delete are locked.
+A non-whitespace acknowledgement comment from another user increments activity_version,
+sets the latest recipient/time and clears read_at/archived_at atomically with the
+acknowledgement. Empty acknowledgements and self-comments create no feedback. An emoji
+counts as a comment. Original content and recipient state are unchanged.
+
+Owner-only PATCH supports `{expected_revision, action: "read"|"archive"|"unarchive"}`.
+Every action checks revision before idempotency, so a stale read or archive cannot
+consume a newer comment. Read records the current activity_version; archive does not
+implicitly read. On a conflict, refresh before deciding whether to retry. The UI uses
+one row per notification, ordered by latest comment time, with the latest commenter and
+preview. Sent retains the original record. Awaiting acknowledgement/deadline filters
+apply to recipient work, not sender feedback. Withdrawn feedback is excluded from the
+active inbox and unread count; history remains accessible by direct link/Sent.
+
+Migration 1790300600 backfills all nonempty historical acknowledgement comments from
+others, including archived recipient rows. Sender read state cannot be inferred, so
+these start unread/unarchived. Multiple recipients collapse into one entry. It emits
+no events; historical activity timestamps and initial alert baseline prevent a desktop
+alert burst. Private sender state changes signal only the sender's tabs. New comment
+alerts use notification/activity-version identity, so later comments can alert again.
+No editable comments, repeat acknowledgements or full conversations are added.
+
+## Combined actions
+
+Recipient PATCH additionally supports `acknowledge_archive` (acknowledge with the optional
+note, mark read and archive) and `read_archive` (mark read and archive without acknowledging).
+Feedback PATCH supports `read_archive`, recording the current activity version and archiving.
+Each combined operation is one authenticated transaction, one row revision increment and
+all-or-nothing with feedback creation and audit events. Existing timestamps are preserved;
+only newly performed recipient actions emit their normal audit event. An existing
+acknowledgement note cannot be replaced. Combined actions always check expected_revision,
+including retries; after a transport failure or conflict, read state before retrying.
+
+The UI presents a split button: its explicit primary label performs the combined action,
+and the arrow reveals individual actions. When a combination is unavailable, the first
+applicable individual action is primary and alternatives remain in the dropdown. A single
+remaining action has no arrow. Withdraw and move-to-inbox are never combined. The optional
+acknowledgement note applies to both acknowledgement variants. Menus support keyboard
+navigation, Escape and outside-click dismissal; tab order remains ordinary buttons.

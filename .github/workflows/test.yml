@@ -50,6 +50,10 @@ jobs:
         run: python3 notifycontext/tests/maintenance.py --binary pocketcontext/bin/pocketcontext
       - name: Test notifications
         run: python3 notifycontext/tests/integration.py --binary pocketcontext/bin/pocketcontext
+      - name: Test atomic combined actions
+        run: python3 notifycontext/tests/combined_actions.py --binary pocketcontext/bin/pocketcontext
+      - name: Test sender feedback inbox and historical migration
+        run: python3 notifycontext/tests/feedback.py --binary pocketcontext/bin/pocketcontext
       - name: Test authentication and deployment settings
         run: python3 notifycontext/tests/auth.py --binary pocketcontext/bin/pocketcontext
       - name: Test Google OAuth claims and Workspace signup
@@ -99,3 +103,5 @@ jobs:
         run: npm test
       - name: Test browser against pinned server
         run: python3 notifycontext/frontend/tests/live.py --binary pocketcontext/bin/pocketcontext
+      - name: Test feedback browser workflow
+        run: python3 notifycontext/frontend/tests/feedback.py --binary pocketcontext/bin/pocketcontext

@@ -104,8 +104,15 @@ def main():
         req('POST', path('notifications'), body, at)
         for s in [a, b, e]: s.quiet()  # idempotent retry creates no event
         for action in ['read', 'acknowledge', 'archive', 'unarchive']:
-            recipient = req('PATCH', path('notification_recipients') + '/' + recipient['id'], {'action': action, 'expected_revision': recipient['revision']}, bt)
+            recipient = req('PATCH', path('notification_recipients') + '/' + recipient['id'], {'action': action, 'expected_revision': recipient['revision'], **({'acknowledgement_markdown':'Useful comment'} if action=='acknowledge' else {})}, bt)
             a.changed(); b.changed(); e.quiet(); o.quiet()
+        feedback=query(req, 'SELECT * FROM notification_feedback', at)[0]
+        for action in ['read','archive','unarchive']:
+            feedback=req('PATCH',path('notification_feedback')+'/'+feedback['id'],{'action':action,'expected_revision':feedback['revision']},at)
+            a.changed(); b.quiet(); e.quiet(); o.quiet()
+        later=query(req,f"SELECT * FROM notification_recipients WHERE notification='{n['id']}'",et)[0]
+        req('PATCH',path('notification_recipients')+'/'+later['id'],{'action':'acknowledge','expected_revision':later['revision'],'acknowledgement_markdown':'Later comment'},et)
+        a.changed();e.changed();a.quiet();b.quiet();o.quiet()
         req('PATCH', path('notifications') + '/' + n['id'], {'action': 'withdraw', 'expected_revision': 1, 'withdrawal_reason': 'Synthetic replacement'}, at)
         for s in [a, b, e]: s.changed()
         req('POST', path('notifications'), dict(body, submission_key='rollback', subject='Synthetic audit failure'), at, expected=400)

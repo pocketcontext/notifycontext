@@ -81,6 +81,15 @@ def main():
         cli('update', 'notification_recipients', row['id'], '{"action":"read"}', expected=2)
         env['NOTIFYCONTEXT_USER_EMAIL'] = 'sender@example.com'
         assert json.loads(cli('backlog', '--sent', '--include-archived'))['count'] == 5
+        feedback=json.loads(cli('backlog','--feedback','--unread'))
+        assert feedback['count']==1 and feedback['complete']
+        f=feedback['items'][0]
+        read=json.loads(cli('update','notification_feedback',f['feedback_record_id'],json.dumps(dict(expected_revision=f['feedback_revision'],action='read'))))
+        assert json.loads(cli('backlog','--feedback','--unread'))['count']==0
+        cli('update','notification_feedback',read['id'],json.dumps(dict(expected_revision=read['revision'],action='archive')))
+        assert json.loads(cli('backlog','--feedback'))['count']==0
+        assert json.loads(cli('backlog','--feedback','--include-archived'))['count']==1
+
         pending_payload = dict(payload, recipients=[], recipient_emails=['NewColleague@Example.com'], submission_key='pending-one')
         pending = json.loads(cli('publish', json.dumps(pending_payload)))
         assert json.loads(cli('publish', json.dumps(pending_payload)))['id'] == pending['id']

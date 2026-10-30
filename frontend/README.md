@@ -25,3 +25,31 @@ python3 tests/live.py --binary /absolute/path/to/pinned/pocketcontext
 ```
 
 The browser suite exercises safe Markdown, explicit actions, a multi-page backlog, mobile layout, keyboard dialog navigation, permission denial, alert deduplication, pause/resume and revoked sessions. Alert APIs are mocked; native OS popup delivery is not verified. The live test runs a production build against an isolated synthetic database and verifies browser writes through authenticated SQL. Live Google OAuth requires separately configured credentials and is not covered by the local browser test.
+
+## Preview sender inbox resurfacing
+
+After `npm ci && npm run build` in `frontend`, from the repository root run:
+
+```sh
+python3 scripts/preview_feedback.py --binary /absolute/path/to/pinned/pocketcontext
+```
+
+Open the printed loopback URL and expand **Local test sign-in**. Use
+`sender@example.com` / `SyntheticUserPassword123!`. The temporary database has 19
+synthetic historical comments, including “Amazing feature!” on the tunnel notification.
+Open it, mark comments read and archive comments. It remains in Sent. To test resurfacing,
+sign in as `later@example.com` with the same password, acknowledge the tunnel notification
+with a note, then return to the sender account. A separate private browser window allows
+both accounts to stay open and demonstrates realtime updates. No production connection,
+real accounts or real messages are used. Ctrl-C stops the preview and removes its database.
+
+`python3 frontend/tests/feedback.py --binary /absolute/path/to/pinned/pocketcontext`
+runs the same workflow through a real browser and verifies quiet historical backfill,
+explicit read state, archive persistence, comment search, later-comment resurfacing,
+unread counts and alert deduplication. Browser Notification APIs are mocked.
+
+Triage uses a split button: **Acknowledge & archive**, **Read & archive**, or
+**Read & archive comments** when compatible actions remain. Click the arrow for
+individual actions. Optional acknowledgement notes are saved with either acknowledgement
+choice. A sole remaining action has no dropdown. Combined actions use one atomic REST
+request; newer comments still resurface, and stale versions are rejected.

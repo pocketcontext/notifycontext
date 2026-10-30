@@ -272,3 +272,47 @@ reference links, so the open record and acknowledgement drafts survive. `mailto:
 in-app links are unchanged; `javascript:` links remain removed. The 40 Chromium tests,
 the production build and the actual-server browser workflow passed against a clean
 416841c build with synthetic isolated data, using Node.js 26 locally.
+
+## Sender acknowledgement-comment inbox — local validation, 30 October 2026
+
+Implemented sender-private feedback state, historical backfill and read/archive/unarchive
+triage. Nonempty comments from another recipient resurface one notification row unread;
+blank/self acknowledgements do not. Recipient state is unchanged. No conversation API
+or repeat acknowledgements were added. This change has not been published or deployed.
+
+Validated with a clean source build of the pinned PocketContext 416841c, CGO and
+sqlite_math_functions, on macOS arm64. Frontend build and all 40 Playwright tests passed.
+The real-browser feedback test passed a 19-comment historical migration, quiet startup,
+comment search, explicit read, archive across reload, Sent retention, a later recipient
+comment returning to the top, unread counts and one desktop alert. Native OS alerts
+were mocked. The screenshot was inspected for layout.
+
+Server feedback tests passed backfill exclusions, owner-only SQL/REST, independent
+recipient state, duplicate acknowledgement idempotency, stale read/archive conflicts,
+unarchive and transaction rollback on acknowledgement-event failure. Integration,
+private realtime (including sender-only feedback triage and later-comment routing),
+snapshot freshness, lookup-index upgrade/rollback and adversarial security passed.
+The 22 client tests and portable skill/schema checks passed, including feedback retrieval
+and explicit read/archive. The existing live-browser test also passed large-detail
+fallback and real rate-limit recovery. Python 3.14 was used for security checks because
+macOS system Python 3.9 raises socket.timeout separately from the test's TimeoutError catch.
+
+`python3 scripts/preview_feedback.py --binary /absolute/path/to/pinned/pocketcontext`
+starts a disposable loopback-only synthetic preview. Real existing comments are backfilled
+when migration 1790300600 is deployed; no live recipient or sender state was changed during
+this validation. The published client launcher remains unchanged until release.
+
+Preview follow-up: fixed desktop scrolling so the list and detail panes scroll
+independently within the viewport, and each selected message opens at its top.
+The new long-list/long-message regression and both targeted mobile layout tests
+passed (3 tests); production frontend build passed. Verified in the user's local
+preview with the last row selected and its details visible alongside it.
+
+Split-action follow-up: all 43 frontend tests passed, including the combined
+request with an optional note, individual dropdown actions, keyboard dismissal,
+and the single-action state without a dropdown. The production frontend build,
+combined-action server tests, integration tests and feedback browser workflow
+passed. Server coverage includes atomic read/acknowledge/archive, stale revisions,
+authorization, later-comment resurfacing and rollback on audit-event failure.
+Verified the split button and expanded individual-action menu in the local browser.
+The restarted preview uses synthetic records; production remains unchanged.

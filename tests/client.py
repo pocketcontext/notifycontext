@@ -14,6 +14,26 @@ from notifycontext_client import cli as nc
 
 
 class ClientTest(unittest.TestCase):
+    def test_feedback_backlog_pages_and_keeps_sender_state_separate(self):
+        calls=[]
+        def query(cfg,sql):
+            calls.append(sql)
+            return ([{'feedback_record_id':'a'},{'feedback_record_id':'b'}] if "f.id > ''" in sql else []),False
+        with patch.object(nc,'identity',return_value={'id':'self'}), patch.object(nc,'query_rows',side_effect=query), patch.object(nc,'call') as mutation:
+            result=nc.backlog({},nc.parse(['backlog','--feedback','--unread','--page-size','2','--search','Amazing feature!']))
+            self.assertEqual(result['count'],2)
+            self.assertTrue(result['complete'])
+            self.assertIn("f.user = 'self'",calls[0])
+            self.assertIn('f.read_version < f.activity_version',calls[0])
+            self.assertIn("f.archived_at = ''",calls[0])
+            self.assertIn("f.id > 'b'",calls[1])
+            mutation.assert_not_called()
+
+    def test_feedback_rejects_recipient_filters(self):
+        for flag in ['--sent','--awaiting-ack','--overdue']:
+            with self.assertRaises(nc.Fail):
+                nc.backlog({},nc.parse(['backlog','--feedback',flag]))
+
     def test_backlog_pages_until_empty_without_mutation(self):
         calls = []
         def query(cfg, sql):

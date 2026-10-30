@@ -505,6 +505,8 @@ def backlog(cfg, args):
         raise Fail(2, 'page size must be 1–100')
     if (args.awaiting_signup or args.expired_signup) and not args.sent:
         raise Fail(2, '--awaiting-signup and --expired-signup require --sent')
+    if args.feedback:
+        return feedback_backlog(cfg, args, since, before)
     uid = identity(cfg)['id']
     predicates = [('n.sender' if args.sent else 'r.recipient') + ' = ' + literal(uid)]
     if not args.include_archived and not args.sent:
@@ -563,6 +565,41 @@ def backlog(cfg, args):
             'consistency': 'Paginated live reads; concurrent changes may require another refresh.'}
 
 
+def feedback_backlog(cfg, args, since, before):
+    """Sender-private comment inbox; separate from recipient delivery/acknowledgement rows."""
+    if args.sent or args.awaiting_ack or args.overdue or args.awaiting_signup or args.expired_signup:
+        raise Fail(2, '--feedback cannot combine with sent, acknowledgement, deadline or signup filters')
+    predicates=['f.user = ' + literal(identity(cfg)['id'])]
+    if not args.include_archived: predicates.append("f.archived_at = ''")
+    if not args.include_withdrawn: predicates.append("n.withdrawn_at = ''")
+    if args.unread: predicates.append('f.read_version < f.activity_version')
+    if args.sender: predicates.append('n.sender = ' + literal(args.sender))
+    if args.kind: predicates.append('n.kind = ' + literal(args.kind))
+    if since: predicates.append('julianday(f.latest_at) >= julianday(' + literal(since) + ')')
+    if before: predicates.append('julianday(f.latest_at) < julianday(' + literal(before) + ')')
+    if args.search:
+        term=literal(args.search)
+        predicates.append(f"(n.id={term} OR instr(lower(n.subject),lower({term}))>0 OR instr(lower(n.body_markdown),lower({term}))>0 OR EXISTS (SELECT 1 FROM notification_recipients c WHERE c.notification=n.id AND instr(lower(c.acknowledgement_markdown),lower({term}))>0))")
+    result, cursor, size=[], '', args.page_size
+    while True:
+        sql="""SELECT f.id AS feedback_record_id,f.revision AS feedback_revision,f.activity_version,f.read_version,
+          f.read_at,f.archived_at,f.latest_at,n.id AS notification_id,n.subject,n.body_markdown,n.sender,n.kind,n.withdrawn_at,
+          r.recipient AS commenter,d.name AS commenter_name,r.acknowledgement_markdown
+          FROM notification_feedback f JOIN notifications n ON n.id=f.notification
+          JOIN notification_recipients r ON r.id=f.latest_recipient LEFT JOIN user_directory d ON d.id=r.recipient WHERE """
+        sql+=' AND '.join(predicates+['f.id > '+literal(cursor)])+f' ORDER BY f.id LIMIT {size}'
+        batch,truncated=query_rows(cfg,sql)
+        if truncated:
+            if size==1: raise Fail(1,'A feedback row exceeds the response limit. Backlog is incomplete.')
+            size=max(1,size//2);continue
+        result.extend(batch)
+        if len(batch)<size: break
+        next_cursor=batch[-1]['feedback_record_id']
+        if next_cursor<=cursor: raise Fail(1,'Feedback cursor did not advance; refusing an incomplete result')
+        cursor=next_cursor
+    return {'items':result,'count':len(result),'complete':True,'consistency':'Paginated live reads; concurrent changes may require another refresh.'}
+
+
 def bulk(cfg, items):
     if not items or len(items) > 1000:
         raise Fail(2, 'bulk requires 1–1000 explicit recipient actions')
@@ -570,8 +607,8 @@ def bulk(cfg, items):
         if not isinstance(item, dict) or not isinstance(item.get('id'), str) or not re.fullmatch('[a-z0-9]{15}', item['id']):
             raise Fail(2, 'each action needs a recipient record id')
         require_revision(item)
-        if item.get('action') not in ('read', 'acknowledge', 'archive', 'unarchive'):
-            raise Fail(2, 'action must be read, acknowledge, archive or unarchive')
+        if item.get('action') not in ('read', 'acknowledge', 'archive', 'unarchive', 'read_archive', 'acknowledge_archive'):
+            raise Fail(2, 'action must be read, acknowledge, archive, unarchive, read_archive or acknowledge_archive')
         if set(item) - {'id', 'expected_revision', 'action', 'acknowledgement_markdown'}:
             raise Fail(2, 'unexpected bulk action fields')
     results = []
@@ -650,8 +687,8 @@ def run(args):
 
 
 READABLE = ('notifications', 'notification_recipients', 'notification_references', 'notification_events',
-            'user_directory', 'user_status', 'notification_preferences')
-WRITABLE = ('notifications', 'notification_recipients', 'user_status', 'notification_preferences')
+            'user_directory', 'user_status', 'notification_preferences', 'notification_feedback')
+WRITABLE = ('notification_feedback', 'notifications', 'notification_recipients', 'user_status', 'notification_preferences')
 
 
 def parse(argv):
@@ -674,7 +711,7 @@ def parse(argv):
         if name == 'update': p.add_argument('id')
         p.add_argument('json', help='JSON payload or - for stdin')
     p = commands.add_parser('backlog', help='Retrieve every matching recipient row with keyset pagination')
-    for flag in ('sent', 'include-archived', 'include-withdrawn', 'unread', 'awaiting-ack', 'overdue'):
+    for flag in ('feedback', 'sent', 'include-archived', 'include-withdrawn', 'unread', 'awaiting-ack', 'overdue'):
         p.add_argument('--' + flag, action='store_true')
     signup = p.add_mutually_exclusive_group()
     signup.add_argument('--awaiting-signup', action='store_true', help='With --sent: unclaimed email recipients before their 30-day expiry')

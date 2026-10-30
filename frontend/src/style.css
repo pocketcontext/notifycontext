@@ -78,3 +78,21 @@
 .sidebar nav{display:none}
 .sidebar nav.open{display:flex}
 }
+
+/* Keep desktop list and message scrolling independent: selecting a row near the
+   bottom must not leave its message above the visible page. Mobile uses an overlay. */
+@media(min-width:901px){
+  .workspace{height:100dvh;min-height:0;overflow:hidden}
+  .main{height:100%;min-height:0;display:flex;flex-direction:column}
+  .app-bar,.context-bar,.main>.notice{flex-shrink:0}
+  .content-grid{flex:1;min-height:0;overflow:hidden}
+  .list-panel,.detail-panel{min-height:0;overflow-y:auto;overscroll-behavior:contain}
+  .notification-row{flex-shrink:0}
+}
+
+.action-split{display:inline-flex;max-width:100%;align-items:stretch;margin-top:8px}
+.action-split:has(.action-toggle)>.primary:first-child{border-radius:7px 0 0 7px}
+.action-toggle{border-radius:0 7px 7px 0;border-left:1px solid #ffffff55;padding:11px 12px;min-width:40px}
+.action-options{position:fixed;inset:auto;margin:0;padding:6px;border:1px solid var(--border);border-radius:8px;background:white;color:var(--ink);min-width:185px;max-width:calc(100vw - 16px);box-shadow:0 8px 28px #203a302b}
+.action-options button{display:block;width:100%;padding:10px 12px;background:white;color:var(--ink);text-align:left;border-radius:4px;font-size:12px}
+.action-options button:hover,.action-options button:focus-visible{background:#edf3e8}

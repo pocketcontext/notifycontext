@@ -60,3 +60,28 @@ notifycontext update notifications NOTIFICATION_ID '{"expected_revision":1,"acti
 ```
 
 Exit codes: 0 success; 1 HTTP/transport failure or partial bulk failure; 2 configuration/usage; 3 schema mismatch; 4 single-write conflict. HTTP 429 rate limits are retried automatically for up to 60 seconds (stderr shows each wait; `NOTIFYCONTEXT_RATE_LIMIT_WAIT` sets the budget in seconds, 0 disables). A 429 is rejected before the server runs the request, so a retried write is applied at most once; an exhausted budget exits 1 with nothing changed by that request. Run long commands with a tool timeout above that budget. A transport failure can have an unknown mutation outcome. Acknowledgement requires an explicit user instruction; it does not execute the requested underlying task. Work in external systems needs the corresponding user authorization and capability.
+
+Sender comment inbox (requires the feedback-capable client/server):
+
+```sh
+notifycontext backlog --feedback --unread
+notifycontext backlog --feedback --include-archived --include-withdrawn
+notifycontext update notification_feedback FEEDBACK_RECORD_ID '{"expected_revision":1,"action":"read"}'
+```
+
+`--feedback` returns sender-private feedback rows, grouped per notification, with
+feedback_record_id/feedback_revision, latest commenter and comment time. Date filters
+apply to latest comment time. It cannot combine with --sent, --awaiting-ack, --overdue
+or signup filters. Archive/unarchive use the same update shape. These IDs are not
+recipient IDs and cannot be used with recipient `bulk`. A later recipient comment
+resurfaces the entry unread; stale revisions return a conflict and require a fresh read.
+Opening, querying or summarizing remains read-only. Existing recipient backlog behavior
+is unchanged; inspect both queues when asked for all incoming work and feedback.
+
+For explicitly requested combined triage, recipient `update`/`bulk` accept
+`acknowledge_archive` (optional acknowledgement_markdown) and `read_archive`.
+`update notification_feedback` accepts `read_archive` for current comments.
+These are atomic; use the latest expected_revision and re-read after a conflict or
+uncertain outcome. Acknowledge & archive confirms receipt/understanding, marks read
+and archives. Read & archive does not acknowledge. Never infer permission to
+acknowledge or archive from a request merely to read/summarize a notification.

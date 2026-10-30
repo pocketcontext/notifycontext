@@ -86,15 +86,50 @@ function updateNotification(app,id,r,b){
 }
 function updateRecipient(app,id,r,b){
   only(b,['expected_revision','action','acknowledgement_markdown']);if(r.getString('recipient')!==id)denied();
-  const fields={read:'read_at',acknowledge:'acknowledged_at',archive:'archived_at',unarchive:'archived_at'},field=fields[b.action];if(!field)invalid('Invalid recipient action');
+  const combined=b.action==='acknowledge_archive'||b.action==='read_archive';
+  const actions=b.action==='acknowledge_archive'?['read','acknowledge','archive']:b.action==='read_archive'?['read','archive']:[b.action];
+  const fields={read:'read_at',acknowledge:'acknowledged_at',archive:'archived_at',unarchive:'archived_at'};
+  if(actions.some(action=>!fields[action]))invalid('Invalid recipient action');
+  const acknowledges=actions.includes('acknowledge');
   const note=str(b.acknowledgement_markdown,'acknowledgement_markdown',4000);
-  if(b.action!=='acknowledge'&&b.acknowledgement_markdown!==undefined)invalid('Note belongs to acknowledgement');
-  const satisfied=b.action==='unarchive'?!r.getString(field):!!r.getString(field);
-  if(satisfied){if(b.action==='acknowledge'&&r.getString('acknowledgement_markdown')!==note)conflict();return r;}
-  revision(b,r);const n=get(app,'notifications',r.getString('notification'));
-  if(b.action==='acknowledge'&&n.getString('withdrawn_at'))invalid('Cannot acknowledge a withdrawn notification');
-  r.set(field,b.action==='unarchive'?'':new Date().toISOString());if(b.action==='acknowledge')r.set('acknowledgement_markdown',note);
-  bump(app,r);event(app,n.id,id,b.action,r.id);return r;
+  if(!acknowledges&&b.acknowledgement_markdown!==undefined)invalid('Note belongs to acknowledgement');
+  if(acknowledges&&r.getString('acknowledged_at') && (b.acknowledgement_markdown!==undefined || !combined) && r.getString('acknowledgement_markdown')!==note)conflict();
+  // Composite actions check the whole version even on retries; never overwrite newer state.
+  if(combined)revision(b,r);
+  const changes=actions.filter(action=>action==='unarchive'?!!r.getString(fields[action]):!r.getString(fields[action]));
+  if(!changes.length)return r;
+  if(!combined)revision(b,r);
+  const n=get(app,'notifications',r.getString('notification')),newAcknowledgement=changes.includes('acknowledge');
+  if(newAcknowledgement&&n.getString('withdrawn_at'))invalid('Cannot acknowledge a withdrawn notification');
+  const now=new Date().toISOString();
+  for(const action of changes)r.set(fields[action],action==='unarchive'?'':now);
+  if(newAcknowledgement)r.set('acknowledgement_markdown',note);
+  bump(app,r);
+  if(newAcknowledgement && note.trim() && id!==n.getString('sender')){
+    let f=rows(app,'notification_feedback','notification = {:id}',{id:n.id})[0];
+    const fresh=!f;if(fresh)f=new Record(app.findCollectionByNameOrId('notification_feedback'));
+    f.set('notification',n.id);f.set('user',n.getString('sender'));f.set('latest_recipient',r.id);
+    f.set('latest_at',r.getString('acknowledged_at'));f.set('activity_version',f.getInt('activity_version')+1);
+    f.set('read_at','');f.set('archived_at','');
+    if(fresh){f.set('revision',1);app.save(f);}else bump(app,f);
+  }
+  for(const action of changes)event(app,n.id,id,action,r.id);return r;
+}
+function updateFeedback(app,id,r,b){
+  only(b,['expected_revision','action']);if(r.getString('user')!==id)denied();
+  if(!['read','archive','unarchive','read_archive'].includes(b.action))invalid('Invalid feedback action');
+  // Check revision before idempotency: an old read/archive must never consume new activity.
+  revision(b,r);
+  let changed=false;const now=new Date().toISOString();
+  if(['read','read_archive'].includes(b.action) && r.getInt('read_version')!==r.getInt('activity_version')){
+    r.set('read_version',r.getInt('activity_version'));r.set('read_at',now);changed=true;
+  }
+  if(['archive','read_archive'].includes(b.action) && !r.getString('archived_at')){
+    r.set('archived_at',now);changed=true;
+  }
+  if(b.action==='unarchive' && r.getString('archived_at')){r.set('archived_at','');changed=true;}
+  if(!changed)return r;
+  return bump(app,r);
 }
 function personal(app,id,table,r,b){
   const fresh=!r,fields=table==='user_status'?['availability','message','expires_at']:['alerts_paused_until'];only(b,fields.concat(fresh?[]:['expected_revision']));
@@ -121,6 +156,7 @@ function write(e){
   e.app.runInTransaction(app=>{active(app,id);const r=fresh?null:get(app,table,e.record.id);
     if(table==='notifications')result=fresh?publish(app,id,body):updateNotification(app,id,r,body);
     else if(table==='notification_recipients')result=updateRecipient(app,id,r,body);
+    else if(table==='notification_feedback')result=updateFeedback(app,id,r,body);
     else result=personal(app,id,table,r,body);
   });
   return e.json(200,result);

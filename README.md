@@ -280,3 +280,29 @@ preserves volumes. It does not automatically roll back. NotifyContext moved from
 2026 by recovery from its replica. ONCE automatic updates remain disabled. The app-local
 legacy deployment wrapper, installer and ONCE fragment were removed.
 See [deployment controls and recovery](docs/deployment.md).
+
+## Comments return to the sender's inbox
+
+A recipient's nonempty acknowledgement note brings the original notification into the
+sender's Inbox as unread, ordered by the latest comment. Mark comments read and Archive
+comments act only on the sender's inbox state. Another recipient's later comment brings
+it back. Sent always retains the original notification. Blank acknowledgements do not
+resurface; emoji comments do. Opening details still never marks anything read.
+
+The migration includes existing comments (even when recipients archived their copy),
+without historical desktop alerts. Full conversations remain outside this release:
+each recipient still has one immutable acknowledgement. See the
+[local synthetic preview](frontend/README.md#preview-sender-inbox-resurfacing).
+
+Agents can use `backlog --feedback --unread` for the sender comment queue and
+`update notification_feedback ID '{"expected_revision":N,"action":"read"}'`
+(or `archive` / `unarchive`) for explicit triage. `backlog` without `--feedback`
+continues to return recipient delivery rows; `--sent` retains its existing semantics.
+Feedback `--since`/`--before` filter the latest comment time. Read-only retrieval never
+changes either queue. The source client must be installed to use these new commands;
+the published skill launcher remains pinned until a client release is published.
+
+Triage now uses split buttons: the labeled primary action combines compatible work
+(**Acknowledge & archive**, **Read & archive**, **Read & archive comments**), while
+the arrow offers individual actions. Each combined action is atomic and version-checked.
+Acknowledgement remains explicit; reading/archiving alone never acknowledges.

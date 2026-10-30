@@ -34,6 +34,59 @@
       ]
     },
     {
+      "name": "notification_feedback",
+      "columns": [
+        {
+          "name": "activity_version",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "archived_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "created",
+          "type": "TEXT"
+        },
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "latest_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "latest_recipient",
+          "type": "TEXT"
+        },
+        {
+          "name": "notification",
+          "type": "TEXT"
+        },
+        {
+          "name": "read_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "read_version",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "revision",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "updated",
+          "type": "TEXT"
+        },
+        {
+          "name": "user",
+          "type": "TEXT"
+        }
+      ]
+    },
+    {
       "name": "notification_preferences",
       "columns": [
         {

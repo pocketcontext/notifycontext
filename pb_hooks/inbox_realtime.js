@@ -32,8 +32,9 @@ function changed(e) {
     const event = e.record;
     const notification = e.app.findRecordById('notifications', event.getString('notification'));
     const targets = {[notification.getString('sender')]: true};
+    const feedback = event.collection().name === 'notification_feedback';
     const recipientId = event.getString('notification_recipient');
-    const recipients = recipientId
+    const recipients = feedback ? [] : recipientId
       ? [e.app.findRecordById('notification_recipients', recipientId)]
       : e.app.findRecordsByFilter('notification_recipients', 'notification = {:id}', '', 0, 0, {id: notification.id});
     for (const recipient of recipients) {

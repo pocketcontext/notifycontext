@@ -1,11 +1,20 @@
 import {test,expect} from '@playwright/test';
+async function revealAction(page,name,feedback=false){
+ const button=page.getByRole('button',{name,exact:true});
+ const toggle=page.getByRole('button',{name:feedback?'Other feedback actions':'Other message actions',exact:true});
+ await expect(page.locator('.actions button:disabled')).toHaveCount(0);
+ await expect.poll(async()=>await button.isVisible() || await toggle.isVisible()).toBe(true);
+ if(!await button.isVisible())await toggle.click();
+ return button;
+}
+async function chooseAction(page,name,feedback=false){await (await revealAction(page,name,feedback)).click();}
 const user='user00000000001',sender='user00000000002';
 const jwt=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:user,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
 const now=new Date().toISOString();
 const initial={id:'note00000000001',sender,subject:'Supplier renewal ready',body_markdown:'## Review requested\n\nPlease review the [handoff](https://example.com).\n\n| Item | Status |\n| --- | --- |\n| Quote | Ready |\n\n```js\nconst approved = false;\n```\n\n<img src=x onerror="window.attacked=true">\n\n[bad](javascript:window.attacked=true)\n\n[mail](mailto:colleague@example.com)',kind:'review_requested',ack_required:true,due_at:'',withdrawn_at:'',withdrawal_reason:'',revision:1,created:now};
 const users={[user]:'Vamsi',[sender]:'Jack'};
 // Query shapes: consolidated refresh, consolidated detail, joined directory, and the separate fallback/legacy reads.
-const classify=sql=>sql.startsWith('WITH page')?'inbox':sql.includes(') AS recipients')?'detail':sql.includes('FROM user_directory d LEFT JOIN')?'directory':sql.includes('recipient_total') || sql.startsWith('SELECT * FROM notifications')?'note':sql.includes('FROM notification_recipients r LEFT JOIN')?'recipients':sql.includes('FROM notification_references')?'references':sql.includes('FROM user_directory')?'users':sql.includes('FROM user_status')?'statuses':sql.includes('FROM notification_preferences')?'preferences':sql.startsWith('SELECT n.id, n.created')?'latest':sql.includes('count(*) AS total')?'unread':'list';
+const classify=sql=>sql.startsWith('WITH page')?'inbox':sql.includes(') AS recipients')?'detail':sql.includes('FROM user_directory d LEFT JOIN')?'directory':sql.includes('recipient_total') || sql.startsWith('SELECT * FROM notifications')?'note':sql.includes('FROM notification_recipients r LEFT JOIN')?'recipients':sql.includes('FROM notification_references')?'references':sql.includes('FROM user_directory')?'users':sql.includes('FROM user_status')?'statuses':sql.includes('FROM notification_preferences')?'preferences':(sql.startsWith('SELECT n.id, n.created') || sql.includes('AS activity_key FROM'))?'latest':sql.includes('count(*) AS total')?'unread':'list';
 const viewerOf=request=>{try{return JSON.parse(Buffer.from(request.headers().authorization.split('.')[1],'base64url')).id;}catch{return '';}};
 async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false,preference:initialPreference=null,body,subject}={}) {
   let releaseRead;const readGate=new Promise(resolve=>{releaseRead=resolve;});
@@ -41,7 +50,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
   function answer(sql,viewer) {
     const kind=classify(sql),n=['detail','note'].includes(kind)?noteFor(sql,viewer):null;
     if(oversize.has(kind))return {columns:['x'],rows:[],truncated:true};
-    if(kind==='inbox'){const list=sql.slice(sql.indexOf(' AS (')+5,sql.indexOf('), latest(id, created) AS ('));return result([{unread:unread(viewer),latest:JSON.stringify(latest(viewer)),list:JSON.stringify(listRows(list,viewer)),preferences:prefs()[0]?JSON.stringify(prefs()[0]):null}]);}
+    if(kind==='inbox'){const list=sql.slice(sql.indexOf(' AS (')+5,sql.indexOf('), latest(id, created, activity_key) AS ('));return result([{unread:unread(viewer),latest:JSON.stringify(latest(viewer)),list:JSON.stringify(listRows(list,viewer)),preferences:prefs()[0]?JSON.stringify(prefs()[0]):null}]);}
     if(kind==='detail')return result(n?[{...detailNote(n,viewer),recipients:JSON.stringify(peopleFor(n,viewer)),refs:JSON.stringify(refsFor(n))}]:[]);
     if(kind==='directory'){const {offset,limit}=page31(sql);return result(directory().slice(offset,offset+limit));}
     if(kind==='note')return result(n?[sql.startsWith('SELECT * ')?n:detailNote(n,viewer)]:[]);
@@ -76,7 +85,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
     } else {
       writes.push({path:url.pathname,body});
       const recipient=recipients.find(r=>url.pathname.endsWith('/'+r.id));
-      if(recipient){if(body.action==='archive')recipient.archived_at=now;if(body.action==='unarchive')recipient.archived_at='';if(body.action==='read')recipient.read_at=now;if(body.action==='acknowledge'){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}recipient.revision++;data=recipient;}
+      if(recipient){if(['archive','read_archive','acknowledge_archive'].includes(body.action))recipient.archived_at=now;if(body.action==='unarchive')recipient.archived_at='';if(['read','read_archive','acknowledge_archive'].includes(body.action))recipient.read_at=now;if(['acknowledge','acknowledge_archive'].includes(body.action)){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}recipient.revision++;data=recipient;}
       else if(url.pathname.includes('notification_preferences')){preference={id:'prefs0000000001',revision:(preference?.revision || 0)+1,...body};delete preference.expected_revision;data=preference;}
       else if(url.pathname.includes('user_status')){const status={id:'status000000001',user,revision:1,...body};statuses.splice(0,statuses.length,status);data=status;}
       else data={...initial,id:'created00000001',...body};
@@ -101,14 +110,14 @@ test('safe Markdown detail and explicit recipient actions',async({page})=>{
   await expect(page.locator('article a[href^="mailto:"]')).not.toHaveAttribute('target',/./);
   expect(writes).toHaveLength(0);
   await page.getByLabel('Optional acknowledgement note').fill('Draft survives marking read.');
-  await page.getByRole('button',{name:'Mark read',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);expect(writes[0].body.action).toBe('read');
+  await chooseAction(page,'Mark read');await expect.poll(()=>writes.length).toBe(1);expect(writes[0].body.action).toBe('read');
   await expect(page.getByLabel('Optional acknowledgement note')).toBeDisabled();
   await expect(page.getByRole('button',{name:'Acknowledge',exact:true})).toBeDisabled();
   await expect(page.getByRole('button',{name:'Archive',exact:true})).toBeDisabled();
   releaseRead();
   await expect(page.getByRole('button',{name:'Mark read',exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Optional acknowledgement note')).toHaveValue('Draft survives marking read.');
-  await page.getByLabel('Optional acknowledgement note').fill('Received, reviewing tomorrow.');await page.getByRole('button',{name:'Acknowledge',exact:true}).click();await expect(page.locator('.acknowledgement')).toContainText('Received, reviewing tomorrow.');expect(writes[1].body.action).toBe('acknowledge');
+  await page.getByLabel('Optional acknowledgement note').fill('Received, reviewing tomorrow.');await chooseAction(page,'Acknowledge');await expect(page.locator('.acknowledgement')).toContainText('Received, reviewing tomorrow.');expect(writes[1].body.action).toBe('acknowledge');
 });
 test('complete backlog pagination and search',async({page})=>{
   await setup(page,{count:65});await expect(page.locator('.notification-row')).toHaveCount(30);await page.getByRole('button',{name:'Next →'}).click();await expect(page.locator('#page-label')).toHaveText('Page 2');await expect(page.locator('.notification-row')).toHaveCount(30);await page.getByRole('button',{name:'Next →'}).click();await expect(page.locator('.notification-row')).toHaveCount(5);await expect(page.getByRole('button',{name:'Next →'})).toBeDisabled();await page.getByRole('searchbox').fill('missing');await expect(page.getByRole('heading',{name:'No matching notifications'})).toBeVisible();
@@ -285,8 +294,8 @@ test('tab count preserves explicit actions, ignores filters, and resets on logou
   await setup(page,{count:101});await expect(page).toHaveTitle('(101) NotifyContext');
   const favicon=page.locator('link[rel="icon"]');await expect(favicon).toHaveAttribute('href',/99%2B/);
   await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page).toHaveTitle('(101) NotifyContext');
-  await page.getByRole('button',{name:'Acknowledge',exact:true}).click();await expect(page).toHaveTitle('(101) NotifyContext');
-  await page.getByRole('button',{name:'Mark read',exact:true}).click();await expect(page).toHaveTitle('(100) NotifyContext');
+  await chooseAction(page,'Acknowledge');await expect(page).toHaveTitle('(101) NotifyContext');
+  await chooseAction(page,'Mark read');await expect(page).toHaveTitle('(100) NotifyContext');
   await page.getByRole('searchbox').fill('missing');await expect(page.getByRole('heading',{name:'No matching notifications'})).toBeVisible();await expect(page).toHaveTitle('(100) NotifyContext');
   await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page).toHaveTitle('NotifyContext');await expect(favicon).not.toHaveAttribute('href',/%3Ctext/);
 });
@@ -295,7 +304,7 @@ test('archived notifications do not count and failures retain the indicator',asy
   await page.route('**/api/context/query',route=>route.fulfill({status:503,contentType:'application/json',body:'{"message":"Offline"}'}));
   await page.getByRole('button',{name:'Refresh notifications'}).click();await expect(page.locator('#connection')).toContainText('interrupted');await expect(page).toHaveTitle('(1) NotifyContext');
   await page.unroute('**/api/context/query');
-  await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await page.getByRole('button',{name:'Archive',exact:true}).click();await expect(page).toHaveTitle('NotifyContext');
+  await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await chooseAction(page,'Archive');await expect(page).toHaveTitle('NotifyContext');
 });
 
 test('realtime refreshes a background inbox, coalesces events and keeps alert pause independent',async({page})=>{
@@ -343,7 +352,7 @@ test('request budget: startup, steady refresh, detail open and recipient action'
  expect(mock.kinds(mark)).toEqual(['inbox']);
  mark=mock.queries.length;await page.getByRole('heading',{name:'Supplier renewal ready'}).click();await expect(page.locator('.detail-title')).toBeVisible();await page.waitForTimeout(500);
  expect(mock.kinds(mark)).toEqual(['detail']);expect(mock.writes).toHaveLength(0);
- mark=mock.queries.length;await page.getByRole('button',{name:'Mark read',exact:true}).click();await expect(page.getByRole('button',{name:'Mark read',exact:true})).toHaveCount(0);await settle(page);
+ mark=mock.queries.length;await chooseAction(page,'Mark read');await expect(page.getByRole('button',{name:'Mark read',exact:true})).toHaveCount(0);await settle(page);
  expect(mock.kinds(mark).sort()).toEqual(['detail','inbox']);expect(mock.writes.map(write=>write.body.action)).toEqual(['read']);
  expect(mock.writes[0].path).toMatch(/\/notification_recipients\/records\/recp00000000001$/);expect(mock.writes[0].body.expected_revision).toBe(1);
  // The list excerpt is selected in SQL; full bodies stay out of the refresh.
@@ -381,12 +390,12 @@ test('sent, archived, full-content search, filters and page boundaries',async({p
  await page.getByRole('searchbox').fill('hiddenkeyword');await expect(page.locator('.notification-row')).toHaveCount(1);await expect(page.locator('.notification-row h2')).toHaveText('Supplier renewal ready');
  await page.getByRole('button',{name:'Inbox',exact:false}).click();await page.getByRole('searchbox').fill('Notification 2');await expect(page.locator('.notification-row')).toHaveCount(11);
  await page.getByRole('searchbox').fill('');await expect(page.locator('.notification-row')).toHaveCount(30);
- await page.locator('.notification-row h2').filter({hasText:/^Notification 2$/}).click();await page.getByRole('button',{name:'Archive',exact:true}).click();await expect(page.getByRole('button',{name:'Move to inbox',exact:true})).toBeVisible();
+ await page.locator('.notification-row h2').filter({hasText:/^Notification 2$/}).click();await chooseAction(page,'Archive');await expect(await revealAction(page,'Move to inbox')).toBeVisible();
  await expect(page.locator('.notification-row h2').filter({hasText:/^Notification 2$/})).toHaveCount(0);
  await page.getByRole('button',{name:'Archived',exact:false}).click();await expect(page.locator('.notification-row')).toHaveCount(1);await expect(page.locator('.notification-row h2')).toHaveText('Notification 2');
  await page.getByRole('button',{name:'Inbox',exact:false}).click();await page.getByRole('button',{name:'Unread',exact:true}).click();await expect(page.locator('.notification-row')).toHaveCount(30);
  // Totals and alert inputs ignore the displayed view, filter, search and page.
- const sqls=mock.queries.filter(query=>query.kind==='inbox').map(query=>query.sql.slice(query.sql.indexOf('), latest(id, created) AS (')));
+ const sqls=mock.queries.filter(query=>query.kind==='inbox').map(query=>query.sql.slice(query.sql.indexOf('), latest(id, created, activity_key) AS (')));
  expect(new Set(sqls).size).toBe(1);await expect(page.locator('#unread-count')).toHaveText('58');
 });
 test('a 429 without Retry-After backs off, stays friendly and re-opens the selected detail',async({page})=>{
@@ -477,12 +486,12 @@ test('an incomplete fallback recipient list is reported, never shown partially',
 test('sender sees every recipient while a recipient sees only their own row and actions',async({page})=>{
  const mock=await setup(page,{count:2,pending:true});
  await page.getByRole('heading',{name:'Notification 2'}).click();await expect(page.locator('.detail-title')).toHaveText('Notification 2');
- await expect(page.locator('.recipient-status')).toHaveCount(0);await expect(page.getByRole('button',{name:'Acknowledge',exact:true})).toBeVisible();
+ await expect(page.locator('.recipient-status')).toHaveCount(0);await expect(await revealAction(page,'Acknowledge')).toBeVisible();
  const detail=mock.queries.filter(query=>query.kind==='detail').at(-1).sql;expect(detail).not.toContain('SELECT *');expect(detail).toContain("'revision',revision");
  await page.getByRole('button',{name:'Sent',exact:false}).click();await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
  await expect(page.locator('.recipient-status > div')).toHaveCount(3);await expect(page.locator('.actions')).toHaveCount(0);
  await page.getByRole('button',{name:'Inbox',exact:false}).click();await page.getByRole('heading',{name:'Notification 2'}).click();
- await page.getByRole('button',{name:'Archive',exact:true}).click();await expect(page.getByRole('button',{name:'Move to inbox',exact:true})).toBeVisible();
+ await chooseAction(page,'Archive');await expect(await revealAction(page,'Move to inbox')).toBeVisible();
  expect(mock.writes.at(-1).path).toMatch(/recp00000000002$/);
 });
 test('maximum-length multibyte content keeps a character-safe excerpt and the full detail',async({page})=>{
@@ -508,4 +517,60 @@ test('directory and status refresh on schedule and immediately after the user’
  await page.clock.fastForward(60000);await expect.poll(()=>mock.kinds().filter(kind=>kind==='directory').length).toBe(2);
  await page.locator('#settings').click();await page.getByLabel('Status',{exact:true}).selectOption('busy');await page.getByRole('button',{name:'Save status'}).click();
  await expect(page.locator('#my-status')).toHaveText('Busy');expect(mock.kinds().filter(kind=>kind==='directory')).toHaveLength(3);
+});
+
+test('desktop selection stays visible after scrolling down a long notification list',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await setup(page,{count:60,body:'Long message.\n\n'.repeat(300)});
+ const last=page.locator('.notification-row').last();
+ await last.click();
+ await expect(page.locator('.detail-title')).toHaveText('Notification 30');
+ const geometry=await page.evaluate(()=>({
+   pageScroll:window.scrollY,
+   listScroll:document.querySelector('.list-panel').scrollTop,
+   title:document.querySelector('.detail-title').getBoundingClientRect().top,
+   viewport:window.innerHeight
+ }));
+ expect(geometry.pageScroll).toBe(0);
+ expect(geometry.listScroll).toBeGreaterThan(0);
+ expect(geometry.title).toBeGreaterThan(0);
+ expect(geometry.title).toBeLessThan(geometry.viewport);
+ // Scrolling a long message must not carry over to the next selection.
+ await page.locator('.notification-row').first().click();
+ await expect(page.locator('.detail-title')).toHaveText('Supplier renewal ready');
+ await page.locator('#detail').evaluate(element=>{element.scrollTop=700;});
+ await last.click();
+ await expect(page.locator('.detail-title')).toHaveText('Notification 30');
+ expect(await page.locator('#detail').evaluate(element=>element.scrollTop)).toBe(0);
+});
+
+test('split action runs one combined request and dropdown keeps independent choices',async({page})=>{
+ const {writes}=await setup(page);
+ await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
+ await expect(page.getByRole('button',{name:'Acknowledge & archive',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Acknowledge',exact:true})).toHaveCount(0);
+ const toggle=page.getByRole('button',{name:'Other message actions',exact:true});
+ await toggle.click();await expect(toggle).toHaveAttribute('aria-expanded','true');
+ await expect(page.getByRole('button',{name:'Acknowledge',exact:true})).toBeFocused();
+ await page.keyboard.press('ArrowDown');await expect(page.getByRole('button',{name:'Mark read',exact:true})).toBeFocused();
+ await page.keyboard.press('Escape');await expect(toggle).toHaveAttribute('aria-expanded','false');
+ expect(writes).toHaveLength(0);
+ await page.getByLabel('Optional acknowledgement note').fill('Received and understood.');
+ await page.getByRole('button',{name:'Acknowledge & archive',exact:true}).click();
+ await expect(page.locator('.acknowledgement')).toContainText('Received and understood.');
+ expect(writes).toHaveLength(1);expect(writes[0].body).toMatchObject({action:'acknowledge_archive',acknowledgement_markdown:'Received and understood.'});
+ await expect(page).toHaveTitle('NotifyContext');await expect(page.locator('.notification-row')).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Move to inbox',exact:true})).toBeVisible();
+ await expect(toggle).toHaveCount(0);
+});
+
+test('split action adapts to read and archive after individual acknowledgement',async({page})=>{
+ const {writes}=await setup(page);
+ await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
+ await chooseAction(page,'Acknowledge');
+ await expect(page.getByRole('button',{name:'Read & archive',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Read & archive',exact:true}).click();
+ await expect(page).toHaveTitle('NotifyContext');
+ expect(writes.map(w=>w.body.action)).toEqual(['acknowledge','read_archive']);
+ await expect(page.getByRole('button',{name:'Other message actions',exact:true})).toHaveCount(0);
 });

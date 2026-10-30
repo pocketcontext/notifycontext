@@ -72,6 +72,20 @@
       "revision",
       "created",
       "updated"
+    ],
+    "notification_feedback": [
+      "id",
+      "notification",
+      "user",
+      "latest_recipient",
+      "activity_version",
+      "read_version",
+      "latest_at",
+      "read_at",
+      "archived_at",
+      "revision",
+      "created",
+      "updated"
     ]
   },
   "timeoutMs": 2000,
@@ -85,7 +99,8 @@
       "notification_references": "EXISTS (SELECT 1 FROM notifications n WHERE n.id = notification_references.notification AND (n.sender = :requester OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.notification = n.id AND r.recipient = :requester)))",
       "notification_events": "EXISTS (SELECT 1 FROM notifications n WHERE n.id = notification_events.notification AND (n.sender = :requester OR ((n.sender = :requester OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.notification = n.id AND r.recipient = :requester)) AND (notification_events.notification_recipient = '' OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.id = notification_events.notification_recipient AND r.recipient = :requester)))))",
       "user_status": "1 = 1",
-      "notification_preferences": "user = :requester"
+      "notification_preferences": "user = :requester",
+      "notification_feedback": "user = :requester"
     },
     "timeoutMs": 5000,
     "maxRows": 100000,

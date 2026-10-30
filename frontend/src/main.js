@@ -219,27 +219,49 @@ async function directory() {
 }
 const directoryDue=()=>{const age=Date.now()-state.directoryAt;return age>directoryMaxAge || (age>directoryUnknownAge && state.list.some(item=>!state.directory.some(user=>user.id===item.sender)));};
 const visibleNote="(n.withdrawn_at='' OR n.withdrawn_at IS NULL)";
-const listKeys=['id','sender','subject','excerpt','kind','ack_required','withdrawn_at','created','recipient_record','read_at','acknowledged_at','archived_at','recipient_revision'];
+const listKeys=['id','sender','subject','excerpt','kind','ack_required','withdrawn_at','created','recipient_record','read_at','acknowledged_at','archived_at','recipient_revision','feedback_record','commenter'];
+// Both inbox branches have one row per notification. A sender who also addressed themselves
+// uses the feedback row once a colleague comments; their own recipient actions remain in detail.
+function inboxRows() {
+  const user=q(pb.authStore.record.id);
+  return `SELECT n.id,n.sender,n.subject,substr(n.body_markdown,1,140) AS excerpt,n.kind,n.ack_required,n.withdrawn_at,n.created,n.due_at,n.body_markdown,
+    r.id AS recipient_record,r.read_at,r.acknowledged_at,r.archived_at,r.revision AS recipient_revision,NULL AS feedback_record,NULL AS commenter
+    FROM notifications n JOIN notification_recipients r ON r.notification=n.id AND r.recipient=${user}
+    WHERE NOT EXISTS (SELECT 1 FROM notification_feedback f WHERE f.notification=n.id AND f.user=${user})
+    UNION ALL SELECT n.id,n.sender,n.subject,substr(c.acknowledgement_markdown,1,140),n.kind,n.ack_required,n.withdrawn_at,f.latest_at,n.due_at,n.body_markdown,
+    NULL,f.read_at,NULL,f.archived_at,f.revision,f.id,c.recipient
+    FROM notification_feedback f JOIN notifications n ON n.id=f.notification JOIN notification_recipients c ON c.id=f.latest_recipient WHERE f.user=${user}`;
+}
 function listSql() {
   const user=q(pb.authStore.record.id), archived=state.view==='archived';
-  const join=state.view==='sent'?'':` JOIN notification_recipients r ON r.notification=n.id AND r.recipient=${user}`;
-  const fields=state.view==='sent'?"NULL AS recipient_record, NULL AS read_at, NULL AS acknowledged_at, NULL AS archived_at, NULL AS recipient_revision":'r.id AS recipient_record, r.read_at, r.acknowledged_at, r.archived_at, r.revision AS recipient_revision';
-  let where=state.view==='sent'?`n.sender=${user}`:archived?"r.archived_at != ''":"(r.archived_at = '' OR r.archived_at IS NULL)";
-  if(state.filter==='unread') where+=state.view==='sent'?` AND EXISTS (SELECT 1 FROM notification_recipients ur WHERE ur.notification=n.id AND (ur.read_at='' OR ur.read_at IS NULL))`:" AND (r.read_at='' OR r.read_at IS NULL)";
-  if(['awaiting','overdue'].includes(state.filter)) where+=` ${state.filter==='awaiting'?'AND n.ack_required=1':''} AND (n.withdrawn_at='' OR n.withdrawn_at IS NULL) AND ${state.view==='sent'?"EXISTS (SELECT 1 FROM notification_recipients ar WHERE ar.notification=n.id AND (ar.acknowledged_at='' OR ar.acknowledged_at IS NULL))":"(r.acknowledged_at='' OR r.acknowledged_at IS NULL)"}`;
-  if(state.filter==='overdue') where+=` AND n.due_at != '' AND n.due_at < ${q(new Date().toISOString().replace('T',' '))}`;
-  if(state.search) where+=` AND (n.id=${q(state.search)} OR instr(lower(n.subject),lower(${q(state.search)}))>0 OR instr(lower(n.body_markdown),lower(${q(state.search)}))>0)`;
-  // SQLite substr counts characters (code points), so an excerpt never splits a surrogate pair as
-  // UTF-16 slice() could; it may still split a multi-code-point emoji sequence. Search uses the full body.
-  return `SELECT n.id, n.sender, n.subject, substr(n.body_markdown,1,140) AS excerpt, n.kind, n.ack_required, n.withdrawn_at, n.created, ${fields} FROM notifications n${join} WHERE ${where} ORDER BY n.created DESC, n.id DESC LIMIT ${pageSize+1} OFFSET ${state.page*pageSize}`;
+  if(state.view==='sent'){
+    let where=`n.sender=${user}`;
+    if(state.filter==='unread')where+=` AND EXISTS (SELECT 1 FROM notification_recipients ur WHERE ur.notification=n.id AND (ur.read_at='' OR ur.read_at IS NULL))`;
+    if(['awaiting','overdue'].includes(state.filter))where+=` ${state.filter==='awaiting'?'AND n.ack_required=1':''} AND ${visibleNote} AND EXISTS (SELECT 1 FROM notification_recipients ar WHERE ar.notification=n.id AND ar.acknowledged_at='')`;
+    if(state.filter==='overdue')where+=` AND n.due_at != '' AND n.due_at < ${q(new Date().toISOString().replace('T',' '))}`;
+    if(state.search)where+=` AND (${searchSql()})`;
+    return `SELECT n.id,n.sender,n.subject,substr(n.body_markdown,1,140) AS excerpt,n.kind,n.ack_required,n.withdrawn_at,n.created,NULL AS recipient_record,NULL AS read_at,NULL AS acknowledged_at,NULL AS archived_at,NULL AS recipient_revision,NULL AS feedback_record,NULL AS commenter FROM notifications n WHERE ${where} ORDER BY n.created DESC,n.id DESC LIMIT ${pageSize+1} OFFSET ${state.page*pageSize}`;
+  }
+  let where=archived?"r.archived_at != ''":"(r.archived_at = '' OR r.archived_at IS NULL)";
+  // Withdrawn records remain available by direct link and in Sent, never in active inbox counts.
+  if(!archived)where+=` AND ${visibleNote}`;
+  if(state.filter==='unread')where+=" AND (r.read_at='' OR r.read_at IS NULL)";
+  if(['awaiting','overdue'].includes(state.filter))where+=` AND r.feedback_record IS NULL ${state.filter==='awaiting'?'AND n.ack_required=1':''} AND ${visibleNote} AND (r.acknowledged_at='' OR r.acknowledged_at IS NULL)`;
+  if(state.filter==='overdue')where+=` AND n.due_at != '' AND n.due_at < ${q(new Date().toISOString().replace('T',' '))}`;
+  if(state.search)where+=` AND (${searchSql()})`;
+  return `SELECT ${listKeys.map(k=>'r.'+k).join(',')} FROM (${inboxRows()}) r JOIN notifications n ON n.id=r.id WHERE ${where} ORDER BY r.created DESC,r.id DESC LIMIT ${pageSize+1} OFFSET ${state.page*pageSize}`;
+}
+function searchSql(){
+  const term=q(state.search);
+  return `n.id=${term} OR instr(lower(n.subject),lower(${term}))>0 OR instr(lower(n.body_markdown),lower(${term}))>0 OR EXISTS (SELECT 1 FROM notification_recipients sc WHERE sc.notification=n.id AND instr(lower(sc.acknowledgement_markdown),lower(${term}))>0)`;
 }
 // One request per ordinary refresh: the current page (31st row probes for more) plus view-independent
 // unread total, latest 100 inbox IDs for alerts and the owner's preferences, even when the page is empty.
 async function inbox() {
   const user=q(pb.authStore.record.id),list=listSql(),prefs='SELECT id, alerts_paused_until, revision FROM notification_preferences LIMIT 1';
-  const latest=`SELECT n.id, n.created FROM notifications n JOIN notification_recipients r ON r.notification=n.id WHERE r.recipient=${user} AND ${visibleNote} ORDER BY n.created DESC, n.id DESC LIMIT 100`;
-  const unread=`SELECT count(*) AS total FROM notification_recipients r JOIN notifications n ON n.id=r.notification WHERE r.recipient=${user} AND (r.read_at='' OR r.read_at IS NULL) AND (r.archived_at='' OR r.archived_at IS NULL) AND ${visibleNote}`;
-  const [row]=await aggregate(`WITH page(${listKeys.join(', ')}) AS (${list}), latest(id, created) AS (${latest}) SELECT (${unread}) AS unread, (SELECT json_group_array(json_object('id',id,'created',created) ORDER BY created DESC, id DESC) FROM latest) AS latest, (SELECT json_group_array(json_object(${pairs(listKeys)}) ORDER BY created DESC, id DESC) FROM page) AS list, (SELECT json_object('id',id,'alerts_paused_until',alerts_paused_until,'revision',revision) FROM (${prefs})) AS preferences`) || [];
+  const latest=`SELECT r.id, r.created, CASE WHEN r.feedback_record IS NULL THEN r.id ELSE r.id || ':' || f.activity_version END AS activity_key FROM (${inboxRows()}) r LEFT JOIN notification_feedback f ON f.id=r.feedback_record WHERE r.withdrawn_at='' AND r.archived_at='' ORDER BY r.created DESC,r.id DESC LIMIT 100`;
+  const unread=`SELECT count(*) AS total FROM (${inboxRows()}) r WHERE r.read_at='' AND r.archived_at='' AND r.withdrawn_at=''`;
+  const [row]=await aggregate(`WITH page(${listKeys.join(', ')}) AS (${list}), latest(id, created, activity_key) AS (${latest}) SELECT (${unread}) AS unread, (SELECT json_group_array(json_object('id',id,'created',created,'activity_key',activity_key) ORDER BY created DESC, id DESC) FROM latest) AS latest, (SELECT json_group_array(json_object(${pairs(listKeys)}) ORDER BY created DESC, id DESC) FROM page) AS list, (SELECT json_object('id',id,'alerts_paused_until',alerts_paused_until,'revision',revision) FROM (${prefs})) AS preferences`) || [];
   if(row)return {unread:Number(row.unread)||0,latest:JSON.parse(row.latest),list:JSON.parse(row.list),preferences:row.preferences?JSON.parse(row.preferences):null};
   // Bounded fallback for an oversized envelope: separate reads, the list paged by query()'s splitter.
   const records=await query(latest),total=await query(unread),preferences=await query(prefs);
@@ -251,7 +273,7 @@ function renderList(batch) {
   const hasMore=batch.length>pageSize,pager=$('#pagination');
   if(pager)pager.hidden=state.page===0 && !hasMore;
   $('#previous').disabled=state.page===0;$('#next').disabled=!hasMore;$('#page-label').textContent=`Page ${state.page+1}`;
-  $('#list').innerHTML=state.list.length?state.list.map(item=>`<button class="notification-row ${!item.read_at && state.view!=='sent'?'unread':''} ${state.selected===item.id?'selected':''}" data-id="${e(item.id)}"><div class="row-top"><span class="sender">${e(name(item.sender))}</span><time>${e(date(item.created))}</time></div><h2>${e(item.subject)}</h2><p class="excerpt">${e(item.excerpt)}</p><div class="row-bottom"><span class="badge ${e(item.kind)}">${e(kindLabel(item.kind))}</span>${item.withdrawn_at?'<span class="state-label">Withdrawn</span>':item.acknowledged_at?'<span class="state-label">✓ Acknowledged</span>':item.ack_required?'<span class="state-label">Acknowledgement requested</span>':''}</div></button>`).join(''):`<div class="empty"><span class="empty-icon">✓</span><h2>${state.search || state.filter!=='all'?'No matching notifications':'You’re all caught up'}</h2><p>${state.search || state.filter!=='all'?'Try another search or filter.':'New updates and requests will appear here.'}</p></div>`;
+  $('#list').innerHTML=state.list.length?state.list.map(item=>`<button class="notification-row ${!item.read_at && state.view!=='sent'?'unread':''} ${state.selected===item.id?'selected':''}" data-id="${e(item.id)}"><div class="row-top"><span class="sender">${e(name(item.commenter || item.sender))}${item.feedback_record?' replied':''}</span><time>${e(date(item.created))}</time></div><h2>${e(item.subject)}</h2><p class="excerpt">${e(item.excerpt)}</p><div class="row-bottom"><span class="badge ${e(item.kind)}">${e(kindLabel(item.kind))}</span>${item.feedback_record?'<span class="state-label">Comment on your notification</span>':''}${item.withdrawn_at?'<span class="state-label">Withdrawn</span>':item.acknowledged_at?'<span class="state-label">✓ Acknowledged</span>':item.ack_required && !item.feedback_record?'<span class="state-label">Acknowledgement requested</span>':''}</div></button>`).join(''):`<div class="empty"><span class="empty-icon">✓</span><h2>${state.search || state.filter!=='all'?'No matching notifications':'You’re all caught up'}</h2><p>${state.search || state.filter!=='all'?'Try another search or filter.':'New updates and requests will appear here.'}</p></div>`;
   all('.notification-row').forEach(button=>button.onclick=()=>openDetail(button.dataset.id));
 }
 // Run only through runRefresh(), which serializes refreshes.
@@ -265,15 +287,15 @@ async function poll(manual=false, visible=false) {
     const {latest,unread,preferences,list}=await inbox();
     if(epoch!==sessionEpoch)return;
     state.preferences=preferences;
-    const incoming=state.latest===null?[]:latest.filter(item=>!state.latest.has(item.id) && parseDate(item.created).getTime()>=state.lastPoll-15000);
+    const incoming=state.latest===null?[]:latest.filter(item=>!state.latest.has(item.activity_key || item.id) && parseDate(item.created).getTime()>=state.lastPoll-15000);
     const paused=state.preferences?.alerts_paused_until && parseDate(state.preferences.alerts_paused_until)>new Date();
-    incoming.forEach(item=>state.pendingAlerts.set(item.id,item));
+    incoming.forEach(item=>state.pendingAlerts.set(item.activity_key || item.id,item));
     const pending=[...state.pendingAlerts.values()];
     const decision=alertDecision({latest:pending,previous:state.latest,paused,permission:'Notification' in window?Notification.permission:'unsupported',missed:pending.length>incoming.length || (state.lastPoll && Date.now()-state.lastPoll>45000)});
-    if(decision) await desktopAlert(decision,pending[0]?.id);
+    if(decision) await desktopAlert(decision,pending[0]?.id,pending[0]?.activity_key);
     if(epoch!==sessionEpoch)return;
     if(!paused)state.pendingAlerts.clear();
-    state.latest=new Set(latest.map(item=>item.id));state.lastPoll=Date.now();state.connected=true;
+    state.latest=new Set(latest.map(item=>item.activity_key || item.id));state.lastPoll=Date.now();state.connected=true;
     $('#unread-count').textContent=unread;updateTabIndicator(unread);
     $('#connection').textContent='● Connected · automatic updates';$('#connection').classList.remove('offline');
     updateAlerts();
@@ -288,14 +310,14 @@ async function poll(manual=false, visible=false) {
     if(error.busy)void requestRefresh({visible,epoch});
   }
 }
-async function desktopAlert(decision,id) {
+async function desktopAlert(decision,id,activityKey=id) {
   const epoch=sessionEpoch;
   // The Web Locks API serializes localStorage dedup across authenticated tabs.
   if(!navigator.locks)return; // No unreliable fallback that could issue duplicate alerts.
   await navigator.locks.request('notifycontext-alert',async()=>{
     if(epoch!==sessionEpoch || !pb.authStore.isValid)return;
     const key=`notifycontext-alert:${pb.authStore.record.id}`;
-    try {const seen=JSON.parse(localStorage.getItem(key)||'{}');if(seen.id===id)return;localStorage.setItem(key,JSON.stringify({id,at:Date.now()}));}catch{return;}
+    try {const seen=JSON.parse(localStorage.getItem(key)||'{}');if(seen.id===activityKey)return;localStorage.setItem(key,JSON.stringify({id:activityKey,at:Date.now()}));}catch{return;}
     try {const alert=new Notification(decision.title,{body:decision.body,tag:'notifycontext-inbox'});alert.onclick=()=>{window.focus();if(epoch===sessionEpoch && id)void openDetail(id);alert.close();};}catch{report('Desktop alerts are unavailable here. Keep using the inbox.');}
   });
 }
@@ -315,7 +337,7 @@ const final=message=>Object.assign(new Error(message),{final:true});
 // One request: the notification plus separately aggregated recipients and references (no cross product).
 // The requester's snapshot filters both: a sender sees every recipient, a recipient only their own row.
 async function loadDetail(id) {
-  const note=`SELECT n.id, n.sender, n.subject, n.body_markdown, n.kind, n.ack_required, n.due_at, n.withdrawn_at, n.withdrawal_reason, n.revision, n.created, (SELECT count(*) FROM notification_recipients WHERE notification=n.id) AS recipient_total, (SELECT count(*) FROM notification_references WHERE notification=n.id) AS reference_total`;
+  const note=`SELECT (SELECT json_object('id',f.id,'read_at',f.read_at,'archived_at',f.archived_at,'revision',f.revision,'latest_recipient',f.latest_recipient,'latest_at',f.latest_at) FROM notification_feedback f WHERE f.notification=n.id) AS feedback, n.id, n.sender, n.subject, n.body_markdown, n.kind, n.ack_required, n.due_at, n.withdrawn_at, n.withdrawal_reason, n.revision, n.created, (SELECT count(*) FROM notification_recipients WHERE notification=n.id) AS recipient_total, (SELECT count(*) FROM notification_references WHERE notification=n.id) AS reference_total`;
   const recipients=`SELECT r.id, r.recipient, d.name AS recipient_name, r.addressed_email, r.claimed_at, r.claim_expires_at, r.read_at, r.acknowledged_at, r.archived_at, r.acknowledgement_markdown, r.revision, r.created FROM notification_recipients r LEFT JOIN user_directory d ON d.id=r.recipient WHERE r.notification=${q(id)}`;
   const references=`SELECT id, kind, label, url, created FROM notification_references WHERE notification=${q(id)}`;
   const found=await aggregate(`${note}, (SELECT json_group_array(json_object(${pairs(recipientKeys)}) ORDER BY created, id) FROM (${recipients})) AS recipients, (SELECT json_group_array(json_object(${pairs(referenceKeys)}) ORDER BY created, id) FROM (${references})) AS refs FROM notifications n WHERE n.id=${q(id)} LIMIT 1`);
@@ -330,18 +352,50 @@ async function loadDetail(id) {
   if(detail.recipients.length!==Number(detail.notification.recipient_total) || detail.references.length!==Number(detail.notification.reference_total))throw final('Recipient details are incomplete. Reload to try again.');
   return detail;
 }
+function actionControl(record,notification,feedback=false){
+  const prefix=feedback?'feedback':'message',attribute=feedback?'data-feedback-action':'data-action';
+  const individual=[];
+  if(!feedback && !record.acknowledged_at && !notification.withdrawn_at)individual.push(['acknowledge','Acknowledge']);
+  if(!record.read_at)individual.push(['read',feedback?'Mark comments read':'Mark read']);
+  individual.push([record.archived_at?'unarchive':'archive',record.archived_at?(feedback?'Move comments to inbox':'Move to inbox'):(feedback?'Archive comments':'Archive')]);
+  const primary=!record.archived_at && individual.some(([action])=>action==='acknowledge')?['acknowledge_archive','Acknowledge & archive']:
+    !record.archived_at && !record.read_at?['read_archive',feedback?'Read & archive comments':'Read & archive']:individual[0];
+  const choices=individual.filter(([action])=>action!==primary[0]),hint=primary[0]==='acknowledge_archive'?'Saves your note, acknowledges, marks read and archives.':primary[0]==='read_archive'?(feedback?'Marks current comments read and archives them.':'Marks this message read and archives it.'):'';
+  return `<div class="action-split"><button class="primary" ${attribute}="${primary[0]}" ${hint?`aria-describedby="${prefix}-action-hint"`:''}>${primary[1]}</button>${choices.length?`<button type="button" class="primary action-toggle" popovertarget="${prefix}-action-options" aria-expanded="false" aria-label="Other ${prefix} actions">▾</button><div id="${prefix}-action-options" class="action-options" popover="auto" role="group" aria-label="Individual ${prefix} actions">${choices.map(([action,label])=>`<button type="button" ${attribute}="${action}">${label}</button>`).join('')}</div>`:''}</div>${hint?`<p class="fine" id="${prefix}-action-hint">${hint}</p>`:''}`;
+}
+function bindActionMenus(){
+  all('.action-toggle').forEach(toggle=>{
+    const menu=document.getElementById(toggle.getAttribute('popovertarget'));
+    menu.addEventListener('toggle',event=>{
+      const open=event.newState==='open';toggle.setAttribute('aria-expanded',String(open));
+      if(!open)return;
+      const box=toggle.getBoundingClientRect();
+      menu.style.left=Math.max(8,Math.min(box.right-menu.offsetWidth,innerWidth-menu.offsetWidth-8))+'px';
+      menu.style.top=(box.bottom+menu.offsetHeight+8<=innerHeight?box.bottom+6:Math.max(8,box.top-menu.offsetHeight-6))+'px';
+      menu.querySelector('button')?.focus();
+    });
+    menu.addEventListener('keydown',event=>{
+      const buttons=[...menu.querySelectorAll('button')],index=buttons.indexOf(document.activeElement);
+      if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
+        event.preventDefault();buttons[event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();
+      }
+    });
+  });
+}
 async function openDetail(id) {
   const epoch=sessionEpoch;
   state.selected=id;saveRoute();
-  const panel=$('#detail');panel.classList.add('open');panel.dataset.id='';panel.innerHTML='<p class="loading">Loading notification…</p>';
+  const panel=$('#detail');panel.scrollTop=0;panel.classList.add('open');panel.dataset.id='';panel.innerHTML='<p class="loading">Loading notification…</p>';
   try {
     const detail=await loadDetail(id);
     if(epoch!==sessionEpoch || state.selected!==id)return;
     if(!detail)throw final('This notification is no longer available.');
     const {notification,recipients,references}=detail;
+    const feedback=notification.feedback?JSON.parse(notification.feedback):null;
     if(detailRetry?.id===id)detailRetry=null;
     const mine=recipients.find(r=>r.recipient===pb.authStore.record.id),sender=notification.sender===pb.authStore.record.id;
-    panel.innerHTML=`<button class="text-button mobile-back" id="back">← Back to inbox</button><div class="detail-meta"><span class="badge ${e(notification.kind)}">${e(kindLabel(notification.kind))}</span><time>${e(date(notification.created))}</time></div><button class="text-button" id="copy-record">Copy record link</button><h2 class="detail-title">${e(notification.subject)}</h2><div class="author"><span class="avatar">${e(name(notification.sender).slice(0,1))}</span><div><strong>${e(name(notification.sender))}</strong><small>${e(statusDescription(notification.sender))}</small></div></div>${notification.withdrawn_at?`<div class="notice error">Withdrawn: ${e(notification.withdrawal_reason)}</div>`:''}${notification.due_at?`<p class="deadline">Response requested by ${e(date(notification.due_at))}</p>`:''}<article class="markdown">${markdown(notification.body_markdown)}</article>${references.length?`<section class="references"><h3>Related context</h3>${references.map(ref=>`<a href="${e(/^https?:\/\//i.test(ref.url)?ref.url:'#')}" target="_blank" rel="noopener noreferrer">${e(ref.label || ref.url)} <span aria-hidden="true">↗</span></a>`).join('')}</section>`:''}${mine?`<section class="actions"><p class="muted">${mine.acknowledged_at?`Acknowledged ${e(date(mine.acknowledged_at))}`:notification.ack_required?'Your acknowledgement is requested.':'Acknowledge to let the sender know you received this.'}</p>${mine.acknowledgement_markdown?`<div class="markdown acknowledgement">${markdown(mine.acknowledgement_markdown)}</div>`:''}${!mine.acknowledged_at && !notification.withdrawn_at?'<label>Optional acknowledgement note<textarea id="ack-note" maxlength="4000" rows="2" placeholder="Received. I’ll review this tomorrow."></textarea></label><button class="primary" data-action="acknowledge">Acknowledge</button>':''}<div class="secondary-actions">${!mine.read_at?'<button class="secondary" data-action="read">Mark read</button>':''}<button class="secondary" data-action="${mine.archived_at?'unarchive':'archive'}">${mine.archived_at?'Move to inbox':'Archive'}</button></div><p class="fine">Acknowledgement confirms receipt, not completion of the work.</p></section>`:''}${sender?`<section class="recipient-status"><h3>Recipient status</h3>${recipients.map(r=>recipientSummary(r,notification)).join('')}${!notification.withdrawn_at?'<button class="text-button danger" id="withdraw">Withdraw notification</button>':''}</section>`:''}`;
+    panel.innerHTML=`<button class="text-button mobile-back" id="back">← Back to inbox</button><div class="detail-meta"><span class="badge ${e(notification.kind)}">${e(kindLabel(notification.kind))}</span><time>${e(date(notification.created))}</time></div><button class="text-button" id="copy-record">Copy record link</button><h2 class="detail-title">${e(notification.subject)}</h2><div class="author"><span class="avatar">${e(name(notification.sender).slice(0,1))}</span><div><strong>${e(name(notification.sender))}</strong><small>${e(statusDescription(notification.sender))}</small></div></div>${notification.withdrawn_at?`<div class="notice error">Withdrawn: ${e(notification.withdrawal_reason)}</div>`:''}${notification.due_at?`<p class="deadline">Response requested by ${e(date(notification.due_at))}</p>`:''}<article class="markdown">${markdown(notification.body_markdown)}</article>${references.length?`<section class="references"><h3>Related context</h3>${references.map(ref=>`<a href="${e(/^https?:\/\//i.test(ref.url)?ref.url:'#')}" target="_blank" rel="noopener noreferrer">${e(ref.label || ref.url)} <span aria-hidden="true">↗</span></a>`).join('')}</section>`:''}${mine?`<section class="actions"><p class="muted">${mine.acknowledged_at?`Acknowledged ${e(date(mine.acknowledged_at))}`:notification.ack_required?'Your acknowledgement is requested.':'Acknowledge to let the sender know you received this.'}</p>${mine.acknowledgement_markdown?`<div class="markdown acknowledgement">${markdown(mine.acknowledgement_markdown)}</div>`:''}${!mine.acknowledged_at && !notification.withdrawn_at?'<label>Optional acknowledgement note<textarea id="ack-note" maxlength="4000" rows="2" placeholder="Received. I’ll review this tomorrow."></textarea></label>':''}${actionControl(mine,notification)}<p class="fine">Acknowledgement confirms receipt, not completion of the work.</p></section>`:''}${feedback?`<section class="actions feedback-actions"><h3>Comments on your notification</h3><p>${feedback.read_at?'Comments marked read':'New comment'} · ${e(date(feedback.latest_at))}</p><div class="markdown">${markdown(recipients.find(r=>r.id===feedback.latest_recipient)?.acknowledgement_markdown || '')}</div>${actionControl(feedback,notification,true)}</section>`:''}${sender?`<section class="recipient-status"><h3>Recipient status</h3>${recipients.map(r=>recipientSummary(r,notification)).join('')}${!notification.withdrawn_at?'<button class="text-button danger" id="withdraw">Withdraw notification</button>':''}</section>`:''}`;
+    bindActionMenus();
     $('#copy-record').onclick=()=>void navigator.clipboard.writeText(new URL(routeHref(id,true),location.href).href).then(()=>report('Link copied.')).catch(()=>report('Unable to copy link.',true));
     $('#back').onclick=()=>{panel.classList.remove('open');state.selected=null;saveRoute();};
     all('[data-action]').forEach(button=>button.onclick=async()=>{
@@ -349,13 +403,25 @@ async function openDetail(id) {
       const controls=all('.actions button, .actions textarea');
       controls.forEach(control=>{control.disabled=true;});
       try {
-        await pb.collection('notification_recipients').update(mine.id,{expected_revision:mine.revision,action,...(action==='acknowledge'?{acknowledgement_markdown:note}:{})});
+        await pb.collection('notification_recipients').update(mine.id,{expected_revision:mine.revision,action,...(['acknowledge','acknowledge_archive'].includes(action)?{acknowledgement_markdown:note}:{})});
         if(epoch!==sessionEpoch)return;
         // Own write: one urgent list refresh plus the detail re-read; the write itself is never retried.
         const refreshed=requestRefresh({urgent:true});
-        if(state.selected===id){await openDetail(id);if(action!=='acknowledge' && state.selected===id && $('#ack-note'))$('#ack-note').value=note;}
+        if(state.selected===id){await openDetail(id);if(!['acknowledge','acknowledge_archive'].includes(action) && state.selected===id && $('#ack-note'))$('#ack-note').value=note;}
         await refreshed;
       }catch(error){report(friendly(error),true);controls.forEach(control=>{control.disabled=false;});}
+    });
+    all('[data-feedback-action]').forEach(button=>button.onclick=async()=>{
+      all('.feedback-actions button').forEach(b=>{b.disabled=true;});
+      try{
+        await pb.collection('notification_feedback').update(feedback.id,{expected_revision:feedback.revision,action:button.dataset.feedbackAction});
+        if(epoch!==sessionEpoch)return;
+        await requestRefresh({urgent:true});if(state.selected===id)await openDetail(id);
+      }catch(error){
+        if(epoch!==sessionEpoch)return;
+        if(state.selected===id)await openDetail(id);
+        report(error.status===409?'A newer comment or action arrived. Review the refreshed comments and try again.':friendly(error),true);
+      }
     });
     if($('#withdraw'))$('#withdraw').onclick=()=>withdraw(notification);
     all('.notification-row').forEach(button=>button.classList.toggle('selected',button.dataset.id===id));
