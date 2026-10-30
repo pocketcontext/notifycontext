@@ -253,3 +253,13 @@ fails at once, and no recipient state changes. A new Chromium test checks the
 reader's 2, 4, 8, 11, 11, 11 second waits. All README Python suites, 40 Chromium
 tests, the production build and the actual-server browser workflow passed against
 934a63a with synthetic isolated data.
+
+## Server 416841c (v0.9.4, PocketBase v0.41.1) — 30 October 2026
+
+The adopted server is `416841c4d1225ddc464ce0b1e787a797d5b8d7e8`, which changes only
+PocketBase 0.40.4 to 0.41.1 and installer/release tooling. Against a clean build of
+that commit, all README Python suites plus the CI maintenance, entrypoint,
+recovery-comparison and object-storage checks, the 40 Chromium tests, the production
+build and the actual-server browser workflow (including the real rate-limit 429 and
+detail recovery) passed with synthetic isolated data. Local runs used Node.js 26.
+Container gates were not run locally (no Docker).
