@@ -108,15 +108,24 @@ sign-in. Use `identitycontext logout --email you@pocketcontext.com` to revoke th
 shared identity session; already-issued app tokens retain their bounded lifetime.
 `logout --forget` also removes this app's matching URL/email defaults.
 
+For shared-session management, install the separate `identitycontext` command once;
+the app launcher does not put it on your normal PATH:
+
+```sh
+uv tool install 'pocketcontext-identity @ git+https://github.com/pocketcontext/identitycontext.git@f6bb3b147e2e4d9a82b447e54811b959c6543a69'
+```
+
+Use `uv tool dir --bin` to find the executable directory and add it to PATH if needed.
+
 ## Agent skill
 
 Sign in with `notifycontext login --url https://notify.pocketcontext.com --email you@pocketcontext.com`. For password authentication use `login --password` with `NOTIFYCONTEXT_USER_PASSWORD` supplied privately in the environment. URL and email options may appear before or after the command. Resolution is CLI options, then `NOTIFYCONTEXT_URL` / `NOTIFYCONTEXT_USER_EMAIL`, then saved defaults. Successful explicit login saves the URL and email in `default.json` beside the private per-account token file; ordinary commands and refreshes do not change the default. The directory is `NOTIFYCONTEXT_SESSION_DIR`, otherwise `$XDG_STATE_HOME/notifycontext/` (default `~/.local/state/notifycontext/`). Files use mode 0600 and the directory 0700. `logout` removes the selected token and retains settings; `logout --forget` also removes matching defaults. Legacy cache sessions are not imported; sign in again. Passwords are never saved.
 
 
-Install uv and copy `skills/notifycontext/notifycontext` onto PATH (for example, `install -Dm755 skills/notifycontext/notifycontext ~/.local/bin/notifycontext`). The standalone launcher installs its pinned package and dependencies on first use; later runs reuse the uv cache. No neighboring source files are required. Pass `--url URL --email EMAIL` on first login; use Google login or an existing user's `NOTIFYCONTEXT_USER_PASSWORD`. `login --google` prints the sign-in URL and opens the default browser unless `--no-browser` is given, an SSH session is detected or no browser is available.
+Install uv and copy `skills/notifycontext/notifycontext` onto PATH (for example, `install -Dm755 skills/notifycontext/notifycontext ~/.local/bin/notifycontext`). The standalone launcher installs its pinned package and dependencies on first use; later runs reuse the uv cache. No neighboring source files are required. Pass `--url URL --email EMAIL` on first hosted login; use explicit `login --password` with `NOTIFYCONTEXT_USER_PASSWORD` for a provisioned password account. The explicit direct-app fallback, `login --google`, prints the sign-in URL and opens the default browser unless `--no-browser` is given, an SSH session is detected or no browser is available.
 
 ```sh
-notifycontext login --google
+notifycontext login --url https://notify.pocketcontext.com --email you@pocketcontext.com
 notifycontext whoami
 notifycontext check
 notifycontext backlog --unread

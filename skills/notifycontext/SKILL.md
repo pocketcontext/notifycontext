@@ -5,7 +5,7 @@ description: Send general colleague notifications and manage a complete notifica
 
 # NotifyContext
 
-Use the executable `notifycontext` launcher in this skill directory. Install uv, then run it by absolute path or copy it onto PATH. It installs the pinned client and dependencies on first use and works from any working directory. Pass `--url URL --email EMAIL` on first login; use `login` for hosted Workspace sign-in (`login --google` is the explicit direct-app fallback), or supply `NOTIFYCONTEXT_USER_PASSWORD` for an existing password account. `login --google` opens the default browser itself; run it in the background or with a tool timeout longer than its wait (180 seconds by default). If its output says `Browser not opened`, open the printed URL in the user's default browser with the OS opener; never drive or automate the browser. Wait for the command to finish, then run `whoami`. Over SSH, see the sign-in steps in [references/workflows.md](references/workflows.md). Missing credentials must be supplied by the user; do not search unrelated files. Never use superuser credentials for ordinary work.
+Use the executable `notifycontext` launcher in this skill directory. Install uv, then run it by absolute path or copy it onto PATH. It installs the pinned client and dependencies on first use and works from any working directory. Pass `--url URL --email EMAIL` on first login; use `login` for hosted Workspace sign-in (`login --google` is the explicit direct-app fallback), or use `login --password` with `NOTIFYCONTEXT_USER_PASSWORD` for a provisioned password account. `login --google` opens the default browser itself; run it in the background or with a tool timeout longer than its wait (180 seconds by default). If its output says `Browser not opened`, open the printed URL in the user's default browser with the OS opener; never drive or automate the browser. Wait for the command to finish, then run `whoami`. Over SSH, see the sign-in steps in [references/workflows.md](references/workflows.md). Missing credentials must be supplied by the user; do not search unrelated files. Never use superuser credentials for ordinary work.
 
 Run `whoami` and `check` when establishing a session. `check` compares the live authenticated SQL schema with the bundled snapshot. On mismatch, inspect `schema` and use the server's actual contract. See [references/workflows.md](references/workflows.md) for commands and [references/schema.md](references/schema.md) for data and access rules.
 
@@ -43,6 +43,15 @@ identity app access expires within fifteen minutes.
 sign-in. Use `identitycontext logout --email you@pocketcontext.com` to revoke the
 shared identity session; already-issued app tokens retain their bounded lifetime.
 `logout --forget` also removes this app's matching URL/email defaults.
+
+For shared-session management, install the separate `identitycontext` command once;
+the app launcher does not put it on your normal PATH:
+
+```sh
+uv tool install 'pocketcontext-identity @ git+https://github.com/pocketcontext/identitycontext.git@f6bb3b147e2e4d9a82b447e54811b959c6543a69'
+```
+
+Use `uv tool dir --bin` to find the executable directory and add it to PATH if needed.
 
 ## Notifications and backlog
 
