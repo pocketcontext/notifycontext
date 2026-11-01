@@ -74,11 +74,43 @@ Open `http://127.0.0.1:8090`. No real users or domain records are seeded. An ope
 
 PocketBase's existing default `users` collection serves humans and agents. Configure a separate Google OAuth Web client with `NOTIFYCONTEXT_GOOGLE_CLIENT_ID`, `NOTIFYCONTEXT_GOOGLE_CLIENT_SECRET` and `NOTIFYCONTEXT_GOOGLE_WORKSPACE_DOMAIN`. Both credentials must be supplied together. Verified provider claims, exact hosted domain and email domain are validated on the server; client-selected provisioning fields are ignored. Direct signup is blocked. JIT admits ordinary colleagues, never administrators. Without a configured domain, Google login requires an existing account.
 
-Disable an account to revoke its tokens. Changing verification also rotates tokens; unverified accounts cannot use the app. Account deletion is blocked to preserve attribution. Google Workspace suspension does not revoke an already-issued app session: offboarding includes disabling the app account. The directory exposes IDs and names, not emails or auth fields. Sessions last seven days; the portable client renews active sessions.
+Disable an account to revoke its tokens. Changing verification also rotates tokens; unverified accounts cannot use the app. Account deletion is blocked to preserve attribution. Google Workspace suspension does not revoke an already-issued app session: offboarding includes disabling the app account. The directory exposes IDs and names, not emails or auth fields. Direct-Google/password sessions last seven days; hosted-identity app tokens last at most fifteen minutes. The portable client renews each through its original authentication method.
+
+## Hosted identity pilot
+
+Run `notifycontext login --url https://notify.pocketcontext.com --email you@pocketcontext.com`.
+The shared IdentityContext client opens a hosted sign-in URL, or prints it over SSH.
+Complete Google sign-in in your browser and paste the single-use code into the
+original terminal. The verifier stays in that process; no callback tunnel is needed.
+A valid shared identity session can be reused when signing into the other pilot app.
+
+Shared identity credentials live in `$XDG_STATE_HOME/pocketcontext-id/` (default
+`~/.local/state/pocketcontext-id/`) with private directory/file permissions. They
+expire after seven idle days or thirty days absolute. App URL/email defaults and
+app tokens remain under the existing `notifycontext` state directory. App tokens last
+at most fifteen minutes and cannot be extended by PocketBase auth-refresh; the
+client requests a new signed assertion from IdentityContext instead. Renewal
+never opens a browser during ordinary commands and never falls back automatically.
+Identity assertions are single-use, valid for sixty seconds, and bound to this
+application's exact configured audience. Account disable and existing application
+authorization still apply independently.
+
+Explicit fallback remains `notifycontext login --google --no-browser`; over SSH,
+forward port 8765 from the browser computer to the CLI host before using it.
+`login --password` remains explicit for provisioned password accounts. Direct
+Google/password sessions retain their existing application lifetime. Full
+offboarding therefore requires disabling the identity account **and** the app
+accounts. Central disable immediately blocks new assertions; already issued
+identity app access expires within fifteen minutes.
+
+`notifycontext logout` removes this app's cached token, retaining shared identity
+sign-in. Use `identitycontext logout --email you@pocketcontext.com` to revoke the
+shared identity session; already-issued app tokens retain their bounded lifetime.
+`logout --forget` also removes this app's matching URL/email defaults.
 
 ## Agent skill
 
-Sign in with `notifycontext login --google --url https://notify.pocketcontext.com --email you@pocketcontext.com`. For password authentication use `login --password` with `NOTIFYCONTEXT_USER_PASSWORD` supplied privately in the environment. URL and email options may appear before or after the command. Resolution is CLI options, then `NOTIFYCONTEXT_URL` / `NOTIFYCONTEXT_USER_EMAIL`, then saved defaults. Successful explicit login saves the URL and email in `default.json` beside the private per-account token file; ordinary commands and refreshes do not change the default. The directory is `NOTIFYCONTEXT_SESSION_DIR`, otherwise `$XDG_STATE_HOME/notifycontext/` (default `~/.local/state/notifycontext/`). Files use mode 0600 and the directory 0700. `logout` removes the selected token and retains settings; `logout --forget` also removes matching defaults. Legacy cache sessions are not imported; sign in again. Passwords are never saved.
+Sign in with `notifycontext login --url https://notify.pocketcontext.com --email you@pocketcontext.com`. For password authentication use `login --password` with `NOTIFYCONTEXT_USER_PASSWORD` supplied privately in the environment. URL and email options may appear before or after the command. Resolution is CLI options, then `NOTIFYCONTEXT_URL` / `NOTIFYCONTEXT_USER_EMAIL`, then saved defaults. Successful explicit login saves the URL and email in `default.json` beside the private per-account token file; ordinary commands and refreshes do not change the default. The directory is `NOTIFYCONTEXT_SESSION_DIR`, otherwise `$XDG_STATE_HOME/notifycontext/` (default `~/.local/state/notifycontext/`). Files use mode 0600 and the directory 0700. `logout` removes the selected token and retains settings; `logout --forget` also removes matching defaults. Legacy cache sessions are not imported; sign in again. Passwords are never saved.
 
 
 Install uv and copy `skills/notifycontext/notifycontext` onto PATH (for example, `install -Dm755 skills/notifycontext/notifycontext ~/.local/bin/notifycontext`). The standalone launcher installs its pinned package and dependencies on first use; later runs reuse the uv cache. No neighboring source files are required. Pass `--url URL --email EMAIL` on first login; use Google login or an existing user's `NOTIFYCONTEXT_USER_PASSWORD`. `login --google` prints the sign-in URL and opens the default browser unless `--no-browser` is given, an SSH session is detected or no browser is available.
@@ -136,6 +168,8 @@ python3 tests/backup.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/client.py
 python3 tests/rate_limit.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/oauth.py
+python3 tests/identity_client.py
+python3 tests/identity_integration.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/deploy_workflow.py
 ```
 
@@ -143,7 +177,7 @@ Frontend browser commands and actual results are recorded in [validation evidenc
 
 ## Infrastructure provenance
 
-The application domain model is independent. Authentication, Google login, account lifecycle, container replication and locked deployment patterns were adapted from RaiseContext `d9e337a05fddfdc26e082f8e1a1e3b0efb0c0e52`; filtered-snapshot patterns were inspected in ChatContext `7fac3712007b8d123620f46eb93888bf8e51118b`. The server pin is `416841c4d1225ddc464ce0b1e787a797d5b8d7e8`.
+The application domain model is independent. Authentication, Google login, account lifecycle, container replication and locked deployment patterns were adapted from RaiseContext `d9e337a05fddfdc26e082f8e1a1e3b0efb0c0e52`; filtered-snapshot patterns were inspected in ChatContext `7fac3712007b8d123620f46eb93888bf8e51118b`. The server pin is `5f1b8f53e0af9d45cb0b396a2ecfb4e9932dca5a`.
 
 Source is public at https://github.com/pocketcontext/notifycontext. The public application is deployed at https://notify.pocketcontext.com; see [deployment status](DEPLOYMENT.md) for verified release evidence and remaining setup.
 

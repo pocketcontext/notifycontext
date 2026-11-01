@@ -5,12 +5,44 @@ description: Send general colleague notifications and manage a complete notifica
 
 # NotifyContext
 
-Use the executable `notifycontext` launcher in this skill directory. Install uv, then run it by absolute path or copy it onto PATH. It installs the pinned client and dependencies on first use and works from any working directory. Pass `--url URL --email EMAIL` on first login; use `login --google` for Workspace browser sign-in, or supply `NOTIFYCONTEXT_USER_PASSWORD` for an existing password account. `login --google` opens the default browser itself; run it in the background or with a tool timeout longer than its wait (180 seconds by default). If its output says `Browser not opened`, open the printed URL in the user's default browser with the OS opener; never drive or automate the browser. Wait for the command to finish, then run `whoami`. Over SSH, see the sign-in steps in [references/workflows.md](references/workflows.md). Missing credentials must be supplied by the user; do not search unrelated files. Never use superuser credentials for ordinary work.
+Use the executable `notifycontext` launcher in this skill directory. Install uv, then run it by absolute path or copy it onto PATH. It installs the pinned client and dependencies on first use and works from any working directory. Pass `--url URL --email EMAIL` on first login; use `login` for hosted Workspace sign-in (`login --google` is the explicit direct-app fallback), or supply `NOTIFYCONTEXT_USER_PASSWORD` for an existing password account. `login --google` opens the default browser itself; run it in the background or with a tool timeout longer than its wait (180 seconds by default). If its output says `Browser not opened`, open the printed URL in the user's default browser with the OS opener; never drive or automate the browser. Wait for the command to finish, then run `whoami`. Over SSH, see the sign-in steps in [references/workflows.md](references/workflows.md). Missing credentials must be supplied by the user; do not search unrelated files. Never use superuser credentials for ordinary work.
 
 Run `whoami` and `check` when establishing a session. `check` compares the live authenticated SQL schema with the bundled snapshot. On mismatch, inspect `schema` and use the server's actual contract. See [references/workflows.md](references/workflows.md) for commands and [references/schema.md](references/schema.md) for data and access rules.
 
-Sign in with `notifycontext login --google --url https://notify.pocketcontext.com --email you@pocketcontext.com`. For password authentication use `login --password` with `NOTIFYCONTEXT_USER_PASSWORD` supplied privately in the environment. URL and email options may appear before or after the command. Resolution is CLI options, then `NOTIFYCONTEXT_URL` / `NOTIFYCONTEXT_USER_EMAIL`, then saved defaults. Successful explicit login saves the URL and email in `default.json` beside the private per-account token file; ordinary commands and refreshes do not change the default. The directory is `NOTIFYCONTEXT_SESSION_DIR`, otherwise `$XDG_STATE_HOME/notifycontext/` (default `~/.local/state/notifycontext/`). Files use mode 0600 and the directory 0700. `logout` removes the selected token and retains settings; `logout --forget` also removes matching defaults. Legacy cache sessions are not imported; sign in again. Passwords are never saved.
+Sign in with `notifycontext login --url https://notify.pocketcontext.com --email you@pocketcontext.com`. For password authentication use `login --password` with `NOTIFYCONTEXT_USER_PASSWORD` supplied privately in the environment. URL and email options may appear before or after the command. Resolution is CLI options, then `NOTIFYCONTEXT_URL` / `NOTIFYCONTEXT_USER_EMAIL`, then saved defaults. Successful explicit login saves the URL and email in `default.json` beside the private per-account token file; ordinary commands and refreshes do not change the default. The directory is `NOTIFYCONTEXT_SESSION_DIR`, otherwise `$XDG_STATE_HOME/notifycontext/` (default `~/.local/state/notifycontext/`). Files use mode 0600 and the directory 0700. `logout` removes the selected token and retains settings; `logout --forget` also removes matching defaults. Legacy cache sessions are not imported; sign in again. Passwords are never saved.
 
+
+## Hosted identity pilot
+
+Run `notifycontext login --url https://notify.pocketcontext.com --email you@pocketcontext.com`.
+The shared IdentityContext client opens a hosted sign-in URL, or prints it over SSH.
+Complete Google sign-in in your browser and paste the single-use code into the
+original terminal. The verifier stays in that process; no callback tunnel is needed.
+A valid shared identity session can be reused when signing into the other pilot app.
+
+Shared identity credentials live in `$XDG_STATE_HOME/pocketcontext-id/` (default
+`~/.local/state/pocketcontext-id/`) with private directory/file permissions. They
+expire after seven idle days or thirty days absolute. App URL/email defaults and
+app tokens remain under the existing `notifycontext` state directory. App tokens last
+at most fifteen minutes and cannot be extended by PocketBase auth-refresh; the
+client requests a new signed assertion from IdentityContext instead. Renewal
+never opens a browser during ordinary commands and never falls back automatically.
+Identity assertions are single-use, valid for sixty seconds, and bound to this
+application's exact configured audience. Account disable and existing application
+authorization still apply independently.
+
+Explicit fallback remains `notifycontext login --google --no-browser`; over SSH,
+forward port 8765 from the browser computer to the CLI host before using it.
+`login --password` remains explicit for provisioned password accounts. Direct
+Google/password sessions retain their existing application lifetime. Full
+offboarding therefore requires disabling the identity account **and** the app
+accounts. Central disable immediately blocks new assertions; already issued
+identity app access expires within fifteen minutes.
+
+`notifycontext logout` removes this app's cached token, retaining shared identity
+sign-in. Use `identitycontext logout --email you@pocketcontext.com` to revoke the
+shared identity session; already-issued app tokens retain their bounded lifetime.
+`logout --forget` also removes this app's matching URL/email defaults.
 
 ## Notifications and backlog
 

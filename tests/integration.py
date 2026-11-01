@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = 'SyntheticUserPassword123!'
 
 @contextlib.contextmanager
-def server(binary, env=None, fixture_migrations=None):
+def server(binary, env=None, fixture_migrations=None, context_config=None):
     with tempfile.TemporaryDirectory(prefix='notifycontext-test-') as tmp:
         hooks=Path(tmp)/'pb_hooks'
         shutil.copytree(ROOT/'pb_hooks',hooks)
@@ -36,6 +36,10 @@ onRecordCreateExecute(e=>{if(e.record.id==='dirfailure00001')throw new Error('Sy
             migrations=Path(tmp)/'pb_migrations';shutil.copytree(ROOT/'pb_migrations',migrations)
             for name,source in fixture_migrations.items():(migrations/name).write_text(source)
         common=[str(Path(binary).resolve()),'--dir',str(Path(tmp)/'pb_data'),'--migrationsDir',str(migrations),'--hooksDir',str(hooks)]
+        if context_config is not None:
+            config_file = Path(tmp) / 'pocketcontext.json'
+            config_file.write_text(json.dumps(context_config))
+            common += ['--contextConfig', str(config_file)]
         child_env=dict(os.environ)
         child_env.update(env or {})
         result=subprocess.run(common+['superuser','upsert','admin@example.com','SyntheticAdminPassword123!'],cwd=ROOT,capture_output=True,text=True,env=child_env)

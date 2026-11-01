@@ -29,8 +29,9 @@ function normalizeEmail(value){
   return email;
 }
 function claimAuth(e){
-  const email=e.get('notifycontextTrustedGoogleEmail');
-  if(e.authMethod==='oauth2'&&email){
+  const trustedEmail=e.authMethod==='context-identity' ? e.get('contextIdentityEmail') : e.get('notifycontextTrustedGoogleEmail');
+  const email=typeof trustedEmail==='string' ? trustedEmail.trim().toLowerCase() : '';
+  if((e.authMethod==='oauth2'||e.authMethod==='context-identity')&&email){
     const user=active(e.app,e.record.id);
     if(user.getString('email').trim().toLowerCase()!==email)denied();
     const now=new Date().toISOString();

@@ -56,6 +56,8 @@ jobs:
         run: python3 notifycontext/tests/feedback.py --binary pocketcontext/bin/pocketcontext
       - name: Test authentication and deployment settings
         run: python3 notifycontext/tests/auth.py --binary pocketcontext/bin/pocketcontext
+      - name: Test hosted identity and application authorization
+        run: python3 notifycontext/tests/identity_integration.py --binary pocketcontext/bin/pocketcontext
       - name: Test Google OAuth claims and Workspace signup
         run: python3 notifycontext/tests/oauth_integration.py --binary pocketcontext/bin/pocketcontext
       - name: Test pending email delivery and migration
@@ -70,6 +72,8 @@ jobs:
         run: python3 notifycontext/tests/skill.py --binary pocketcontext/bin/pocketcontext
       - name: Test OAuth client
         run: python3 notifycontext/tests/oauth.py
+      - name: Test hosted identity client
+        run: python3 notifycontext/tests/identity_client.py
       - name: Test privacy and batch rejection
         run: python3 notifycontext/tests/security.py --binary pocketcontext/bin/pocketcontext
       - name: Test private inbox realtime and transaction rollback
