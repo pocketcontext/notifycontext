@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Command-line client for a NotifyContext colleague notification server. Python 3 standard library only.
 
-Configuration comes from three environment variables:
+URL and email come from CLI options, environment variables, or saved login defaults:
   NOTIFYCONTEXT_URL             server address, for example https://notify.example.com
   NOTIFYCONTEXT_USER_EMAIL     email of an account in the `users` collection
   NOTIFYCONTEXT_USER_PASSWORD  password of that account (optional with Google login)
@@ -23,6 +23,7 @@ from pathlib import Path
 import random
 import re
 import secrets
+import stat
 import sys
 import tempfile
 import time
@@ -65,17 +66,29 @@ def dump(data, pretty=False):
     return json.dumps(data, separators=(',', ':'), ensure_ascii=False)
 
 
-def config(names=ENV[:2]):
-    missing = [name for name in names if not os.environ.get(name)]
+def config(names=ENV[:2], args=None):
+    explicit = {key: getattr(args, key, None) for key in ('url', 'email')}
+    saved = read_default() if any(not explicit[key] and not os.environ.get(ENV[i]) for i, key in enumerate(('url', 'email'))) else {}
+    values = {key: explicit[key] or os.environ.get(ENV[i]) or saved.get(key) for i, key in enumerate(('url', 'email'))}
+    missing = [ENV[i] for i, key in enumerate(('url', 'email')) if not values[key]]
     if missing:
-        raise Fail(2, 'missing environment variable: ' + ', '.join(missing) + '. Ask the user to set every missing variable; do not look for credentials elsewhere.')
-    url = os.environ[ENV[0]].rstrip('/')
-    parsed = urllib.parse.urlsplit(url)
+        raise Fail(2, 'Missing configuration: ' + ', '.join(missing) + '. Run login --url URL --email EMAIL --google (or --password).')
+    url = values['url'].rstrip('/')
+    if any(c.isspace() or ord(c) < 32 for c in url):
+        raise Fail(2, '--url must not contain whitespace or control characters')
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        parsed.port
+    except ValueError:
+        raise Fail(2, '--url must have a valid host and port') from None
     if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise Fail(2, 'NOTIFYCONTEXT_URL must be an HTTP(S) URL without credentials, query, or fragment')
     if parsed.scheme == 'http' and parsed.hostname not in ('localhost', '127.0.0.1', '::1'):
         raise Fail(2, 'Use HTTPS for a remote NotifyContext server')
-    return {'url': url, 'email': os.environ[ENV[1]], 'password': hide(os.environ.get(ENV[2]))}
+    email = values['email'].strip()
+    if not email or any(c.isspace() for c in email) or '@' not in email:
+        raise Fail(2, '--email must be an account email address')
+    return {'url': url, 'email': email, 'password': hide(os.environ.get(ENV[2]))}
 
 
 # Session file: one per server URL and email, readable only by the current user. It lives in
@@ -85,18 +98,71 @@ def session_name(cfg):
     return hashlib.sha256((cfg['url'] + '\n' + cfg['email']).encode()).hexdigest()[:32] + '.json'
 
 
-def session_file(cfg):
+def session_dir():
     folder = os.environ.get('NOTIFYCONTEXT_SESSION_DIR')
     if not folder:
         state = os.environ.get('XDG_STATE_HOME') or str(Path.home() / '.local' / 'state')
         folder = str(Path(state) / 'notifycontext')
-    return Path(folder) / session_name(cfg)
+    return Path(folder)
 
 
-def legacy_session_file(cfg):
-    """Where clients before ENG-55 kept the session; read once and moved."""
-    base = os.environ.get('XDG_CACHE_HOME') or str(Path.home() / '.cache')
-    return Path(base) / 'notifycontext' / session_name(cfg)
+def session_file(cfg):
+    return session_dir() / session_name(cfg)
+
+
+def default_file():
+    return session_dir() / 'default.json'
+
+
+def read_default():
+    path = default_file()
+    try:
+        info = path.lstat()
+        parent = path.parent.lstat()
+        if (not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_uid != os.getuid() or not stat.S_ISDIR(parent.st_mode)
+                or stat.S_IMODE(parent.st_mode) != 0o700 or parent.st_uid != os.getuid()):
+            raise ValueError('unsafe permissions')
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(descriptor) as handle:
+            opened = os.fstat(handle.fileno())
+            if not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.getuid() or stat.S_IMODE(opened.st_mode) != 0o600:
+                raise ValueError('unsafe permissions')
+            value = json.loads(handle.read(65537))
+        if not isinstance(value, dict) or set(value) != {'url', 'email'} or not all(isinstance(v, str) and v for v in value.values()):
+            raise ValueError('invalid settings')
+        return value
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError, TypeError):
+        raise Fail(2, 'Cannot read private default.json; fix or remove the file, or supply --url and --email.') from None
+
+
+def save_default(cfg):
+    path = default_file()
+    temporary = None
+    try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        info = path.parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise OSError('unsafe state directory')
+        if path.is_symlink():
+            raise OSError('unsafe default file')
+        with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, prefix='.default-', delete=False) as handle:
+            temporary = Path(handle.name)
+            os.fchmod(handle.fileno(), 0o600)
+            json.dump({key: cfg[key] for key in ('url', 'email')}, handle)
+        os.replace(temporary, path)
+    except OSError:
+        raise Fail(1, 'Login succeeded, but default settings could not be saved securely.') from None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def forget_default(cfg):
+    if read_default() == {key: cfg[key] for key in ('url', 'email')}:
+        default_file().unlink(missing_ok=True)
 
 
 def read_session(cfg, path):
@@ -110,21 +176,18 @@ def read_session(cfg, path):
 
 
 def load_session(cfg):
-    path = session_file(cfg)
-    if path.exists():
-        return read_session(cfg, path)
-    legacy = legacy_session_file(cfg)
-    session = read_session(cfg, legacy)
-    if session is not None and save_session(cfg, session):
-        legacy.unlink(missing_ok=True)
-    return session
+    return read_session(cfg, session_file(cfg))
 
 
 def save_session(cfg, session):
     path = session_file(cfg)
     try:
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chmod(path.parent, 0o700)
+        info = path.parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise OSError('unsafe session directory')
+        if path.is_symlink():
+            raise OSError('unsafe session file')
         with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, prefix='.session-', delete=False) as handle:
             temporary = Path(handle.name)
             os.fchmod(handle.fileno(), 0o600)
@@ -629,13 +692,18 @@ def run(args):
     if args.command == 'newkey':
         print(secrets.token_urlsafe(24))
         return 0
-    cfg = config()
+    cfg = config(args=args)
     if args.command == 'logout':
         session_file(cfg).unlink(missing_ok=True)
-        legacy_session_file(cfg).unlink(missing_ok=True)
+        if args.forget:
+            forget_default(cfg)
         return 0
     if args.command == 'login':
-        google_login(cfg, args.port, args.timeout, not args.no_browser)
+        session = (google_login(cfg, args.port, args.timeout, not args.no_browser)
+                   if args.google else login(cfg))
+        if load_session(cfg) != session:
+            raise Fail(1, 'Login succeeded, but the session was not saved; defaults unchanged.')
+        save_default(cfg)
         say(f'Signed in as {cfg["email"]} at {cfg["url"]}', sys.stdout)
         return 0
     if args.command == 'check':
@@ -698,7 +766,9 @@ def parse(argv):
     for name in ('whoami', 'schema', 'check', 'logout', 'newkey'):
         commands.add_parser(name)
     p = commands.add_parser('login')
-    p.add_argument('--google', required=True, action='store_true')
+    mode = p.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--google', action='store_true')
+    mode.add_argument('--password', action='store_true', help='use the account password environment variable')
     p.add_argument('--port', type=int, default=8765)
     p.add_argument('--timeout', type=int, default=180)
     p.add_argument('--no-browser', action='store_true', help='print the sign-in URL without opening a browser (use over SSH)')
@@ -720,6 +790,10 @@ def parse(argv):
         p.add_argument('--' + flag)
     p.add_argument('--kind', choices=('fyi', 'review_requested', 'action_required'))
     p.add_argument('--page-size', type=int, default=50)
+    for command in (parser, *commands.choices.values()):
+        command.add_argument('--url', default=argparse.SUPPRESS, help='server URL; overrides environment and saved default')
+        command.add_argument('--email', default=argparse.SUPPRESS, help='account email; overrides environment and saved default')
+    commands.choices['logout'].add_argument('--forget', action='store_true', help='also forget matching default URL and email')
     return parser.parse_args(argv)
 
 

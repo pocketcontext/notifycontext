@@ -1,5 +1,8 @@
 # Client workflows
 
+Sign in with `notifycontext login --google --url https://notify.pocketcontext.com --email you@pocketcontext.com`. For password authentication use `login --password` with `NOTIFYCONTEXT_USER_PASSWORD` supplied privately in the environment. URL and email options may appear before or after the command. Resolution is CLI options, then `NOTIFYCONTEXT_URL` / `NOTIFYCONTEXT_USER_EMAIL`, then saved defaults. Successful explicit login saves the URL and email in `default.json` beside the private per-account token file; ordinary commands and refreshes do not change the default. The directory is `NOTIFYCONTEXT_SESSION_DIR`, otherwise `$XDG_STATE_HOME/notifycontext/` (default `~/.local/state/notifycontext/`). Files use mode 0600 and the directory 0700. `logout` removes the selected token and retains settings; `logout --forget` also removes matching defaults. Legacy cache sessions are not imported; sign in again. Passwords are never saved.
+
+
 Install the `notifycontext` launcher on PATH as described in the skill. These examples use that command.
 
 ```sh

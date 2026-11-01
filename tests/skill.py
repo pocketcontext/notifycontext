@@ -120,6 +120,15 @@ def main():
         history = json.loads(cli('backlog', '--sent', '--include-withdrawn'))
         assert next(row for row in history['items'] if row['notification_id'] == pending['id'])['signup_status'] == 'withdrawn'
         cli('logout')
+        env.pop('NOTIFYCONTEXT_URL')
+        env.pop('NOTIFYCONTEXT_USER_EMAIL')
+        cli('login', '--password', '--url', request.base_url, '--email', 'sender@example.com')
+        env.pop('NOTIFYCONTEXT_USER_PASSWORD')
+        assert json.loads(cli('whoami'))['id'] == sender['id']
+        cli('logout')
+        assert (Path(tmp) / 'state/notifycontext/default.json').exists()
+        cli('logout', '--forget')
+        assert not (Path(tmp) / 'state/notifycontext/default.json').exists()
         if args.trace:
             trace_text = (Path(tmp) / 'trace.jsonl').read_text()
             events = [json.loads(line) for line in trace_text.splitlines()]
