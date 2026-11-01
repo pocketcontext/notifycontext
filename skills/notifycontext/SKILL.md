@@ -37,4 +37,4 @@ Include `NOTIFYCONTEXT_URL` (without its trailing slash) plus `/#/notifications/
 
 ## Optional tracing
 
-Use `observecontext capture --url "$NOTIFYCONTEXT_URL" --service notifycontext.client --upload -- notifycontext COMMAND ...` for explicitly requested tracing. Configure and authenticate ObserveContext separately. Add `--capture-sql` only when SQL text may be retained. Normal commands do not capture traces; reads still never acknowledge notifications. Telemetry failures preserve command results.
+Use `observecontext capture --url https://notify.pocketcontext.com --service notifycontext.client --upload -- notifycontext COMMAND ...` for explicitly requested tracing. Use your configured source-app origin if different. Authenticate ObserveContext separately with login options or saved defaults. Add `--capture-sql` only when SQL text may be retained. Normal commands do not capture traces; reads still never acknowledge notifications. Telemetry failures preserve command results.

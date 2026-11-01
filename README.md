@@ -99,7 +99,7 @@ The server has bounded, authenticated buffer tracing enabled. Ordinary requests 
 untraced. Install the ObserveContext launcher and sign in separately, then run:
 
 ```sh
-observecontext capture --url "$NOTIFYCONTEXT_URL" --service notifycontext.client --upload -- notifycontext query 'SELECT id FROM user_directory LIMIT 5'
+observecontext capture --url https://notify.pocketcontext.com --service notifycontext.client --upload -- notifycontext query 'SELECT id FROM user_directory LIMIT 5'
 ```
 
 Add `--capture-sql` only when SQL text may be retained. Tracing excludes credentials,
