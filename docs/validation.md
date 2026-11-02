@@ -418,3 +418,9 @@ Local validation used Node.js 26; native CI uses the documented Node.js 22.
 All 79 browser fixture cases passed: the full 75-case run (59 existing and 16 new)
 and four additional concurrency/mobile cases, followed by the updated settings
 screenshot check. Independent frontend/backend review found no blocking issues.
+
+The portable launcher was pinned to published client source
+`4e507e7b9375d5495d57aa1e72daec0103d37ab7`. Its copied-launcher suite passed from
+an unrelated temporary directory against the exact pinned server, including live
+schema comparison and explicit preference updates. The final release workflow
+validates this source and launcher together before image publication.
