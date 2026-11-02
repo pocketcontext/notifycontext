@@ -370,3 +370,22 @@ focus is captured immediately before DOM replacement. Desktop/mobile screenshots
 were inspected for layout and overflow. Workflow actionlint passed.
 
 The final clean browser fixture run passed all 59 tests in 2.2 minutes.
+
+## Consistent detail action sizing — 2 November 2026
+
+A scoped CSS rule gives acknowledgement and conversation split controls, their
+dropdown segments and Post comment 13px text and 38px height. Label widths remain
+content-based; dropdown segments retain their 40px width. The old acknowledgement
+primary-button 12px override was removed, while secondary-button styling remains.
+Write / Preview tabs and controls outside the detail action area are unchanged.
+
+Temporary browser measurements at 1440px and 390px viewport widths confirmed all
+five target segments are exactly 38px high with 13px text. Comparing the previous
+stylesheet on the same DOM confirmed the tabs remain 34px high with 12px text and
+unchanged widths. Desktop/mobile and expanded-dropdown screenshots were inspected.
+No tests were added for this CSS-only adjustment; existing release checks apply.
+
+The production build, all 59 existing browser fixture tests and all three actual-server
+workflows (`live.py`, `feedback.py`, `conversations.py`) passed against the unchanged
+pinned server. The baseline workflow includes real 429 recovery. Workflow validation
+and actionlint passed.
