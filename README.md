@@ -164,6 +164,7 @@ Use the pinned binary and synthetic isolated databases:
 
 ```sh
 python3 tests/integration.py --binary /absolute/path/to/pinned/pocketcontext
+python3 tests/preferences.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/conversations.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/security.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/realtime.py --binary /absolute/path/to/pinned/pocketcontext
@@ -400,3 +401,18 @@ tab; validation returns to Write when a required value is missing.
 Conversation triage uses the existing split-button pattern: Read & archive is the
 primary action for unread inbox conversations, with Mark read and Archive available
 in the dropdown. Available actions adapt to read and archived state.
+
+## Auto-advance after archiving
+
+In profile settings, **General → After archiving a conversation** chooses whether
+Inbox triage stays on the conversation (the default), opens the next older or
+previous newer conversation, or returns to the list. The preference is private
+to the account and follows it across devices. Archive, Read & archive and
+Acknowledge & archive use it only after a successful write. Sent and Archived
+views keep their existing behavior.
+
+Navigation follows the current search and filters across pages. At the end of
+the chosen direction, or when the opened conversation is outside those results,
+it returns to the list without wrapping. Opening a destination never marks it
+read or acknowledges it. Drafts remain in the current tab. Delete and
+per-conversation mute are not added; desktop-alert pauses remain separate.

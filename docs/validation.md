@@ -389,3 +389,32 @@ The production build, all 59 existing browser fixture tests and all three actual
 workflows (`live.py`, `feedback.py`, `conversations.py`) passed against the unchanged
 pinned server. The baseline workflow includes real 429 recovery. Workflow validation
 and actionlint passed.
+
+## Auto-advance after archiving — 2 November 2026
+
+The private account preference selects stay (default), next older, previous newer,
+or return to list after successful Inbox archive and combined archive actions.
+The additive migration preserves existing alert pauses and revisions. Destination
+selection uses the current filtered result order, captures the neighbor before
+writing, revalidates after success and updates the displayed page. Navigation
+never reads or acknowledges the destination and preserves drafts in the tab.
+
+All 25 backend/CI regression suites and the updated source-client portable skill
+suite passed against clean pinned server
+`5f1b8f53e0af9d45cb0b396a2ecfb4e9932dca5a`. New preference coverage checks populated
+upgrade, defaults, invalid values, private SQL/REST access, revision conflicts and
+independent alert-pause updates. Backup/container fixtures retain nondefault
+preferences. Package source/wheel build and workflow actionlint passed.
+
+The production frontend build and all four actual-server browser workflows passed:
+baseline (including real 429 recovery), private feedback, shared conversations and
+new auto-advance navigation across page boundaries in both directions. The new
+workflow verifies through authenticated SQL that destination read/acknowledgement
+state stays untouched. Desktop and mobile settings screenshots were inspected.
+Browser fixtures execute real SQLite SELECTs for neighbor/filter/pagination tests;
+release CI additionally runs them and the actual-server workflows on AMD64/ARM64.
+Local validation used Node.js 26; native CI uses the documented Node.js 22.
+
+All 79 browser fixture cases passed: the full 75-case run (59 existing and 16 new)
+and four additional concurrency/mobile cases, followed by the updated settings
+screenshot check. Independent frontend/backend review found no blocking issues.

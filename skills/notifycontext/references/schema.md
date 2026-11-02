@@ -7,7 +7,7 @@ Use `notifycontext schema` for authoritative SQL columns; `schema.json` is the t
 - `notification_references`: notification, kind (`document`, `task`, `record`, `url`), label, HTTP(S) URL, optional source_system/external_id. Immutable.
 - `notification_events`: immutable publication, withdrawal and recipient action history. Recipient sees global publication/withdrawal events and their own actions.
 - `user_status`: unique owner, availability (`available`, `busy`, `in_a_meeting`, `away`, `not_set`), message, optional expires_at, revision. Colleagues can read; only owner changes.
-- `notification_preferences`: unique owner, optional alerts_paused_until, revision. Owner only.
+- `notification_preferences`: unique owner, optional alerts_paused_until, auto_advance (`stay`, `next`, `previous`, `list`; default `stay`), revision. Owner only.
 
 Dates use UTC. Empty dates are empty strings. All SQL results are requester-filtered; administrator status does not bypass notification privacy. REST business reads are locked; use SQL to retrieve records. Other applications' references do not grant access to those applications.
 

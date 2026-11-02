@@ -104,3 +104,26 @@ its dropdown. A read conversation offers **Archive**; an archived one offers **M
 (and **Mark read** when still unread). The dropdown supports keyboard navigation and Escape.
 These remain explicit canonical conversation-state actions; opening or previewing text never
 marks activity read or acknowledges a notification.
+
+## Auto-advance after archiving
+
+Profile settings → General → **After archiving a conversation** offers Stay on
+conversation (the default), Next conversation (older), Previous conversation
+(newer), and Return to list. The private account preference follows the user
+across browsers. It applies to Inbox Archive, Read & archive, and Acknowledge &
+archive actions; Sent and Archived retain their existing behavior.
+
+Navigation follows the current search and filters across page boundaries. The
+neighbor is captured before archiving and checked again afterwards; a missing
+neighbor falls back to the next remaining item in the chosen direction. At the
+end, or for a direct link outside the results, the list opens without wrapping.
+The list retains its page, clamped to the last remaining page when necessary.
+Opening the destination never reads or acknowledges it. Drafts survive navigation,
+and a failed write or manual navigation while an action is pending does not
+advance the selection.
+
+The synthetic actual-server regression verifies the preference and navigation SQL:
+
+```sh
+python3 frontend/tests/auto_advance.py --binary /absolute/path/to/pinned/pocketcontext
+```

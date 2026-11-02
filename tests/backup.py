@@ -24,7 +24,7 @@ def main():
             r('PATCH',path('notification_recipients')+'/'+rec['id'],{'action':'acknowledge','acknowledgement_markdown':'Received, review tomorrow.','expected_revision':1},rt)
             r('POST',path('notification_comments'),{'notification':n['id'],'body_markdown':'Shared follow-up','submission_key':'restore-comment'},st)
             r('POST',path('user_status'),{'availability':'busy','message':'Reviewing'},rt)
-            r('POST',path('notification_preferences'),{'alerts_paused_until':'2030-01-01T00:00:00Z'},rt)
+            r('POST',path('notification_preferences'),{'alerts_paused_until':'2030-01-01T00:00:00Z','auto_advance':'previous'},rt)
             expected={t:query(r,'SELECT * FROM '+t+' ORDER BY id',rt) for t in ['notifications','notification_recipients','notification_references','notification_events','notification_comments','notification_conversation_state','user_status','notification_preferences']}
             pending_expected=query(r,"SELECT * FROM notification_recipients WHERE recipient = '' ORDER BY id",st)
             assert len(pending_expected)==1 and pending_expected[0]['addressed_email']=='future@example.test' and pending_expected[0]['claim_expires_at']

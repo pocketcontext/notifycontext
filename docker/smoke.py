@@ -242,7 +242,7 @@ def write_record(client, user_id):
         retry = json.loads(client.run('create', 'notification_comments', json.dumps(payload)))
         check(comment['id'] == retry['id'], 'comment publication retries retain one immutable comment')
     client.run('create', 'user_status', json.dumps({'availability': 'busy', 'message': 'Synthetic review', 'expires_at': '2099-01-01T12:00:00Z'}))
-    client.run('create', 'notification_preferences', json.dumps({'alerts_paused_until': '2099-01-01T12:00:00Z'}))
+    client.run('create', 'notification_preferences', json.dumps({'alerts_paused_until': '2099-01-01T12:00:00Z', 'auto_advance': 'next'}))
     pending = client.sql(f"SELECT recipient,addressed_email,claimed_at,claim_expires_at FROM notification_recipients WHERE notification = '{notification_id}' AND recipient = ''")
     check(len(pending) == 1 and pending[0][1] == 'future-colleague@example.test' and not pending[0][2] and bool(pending[0][3]),
           'pending email destination and expiry are stored without an auth identity')

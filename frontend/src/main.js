@@ -7,7 +7,7 @@ import './style.css';
 const state = {view:'inbox', filter:'all', search:'', page:0, list:[], directory:[], statuses:[], directoryAt:0, preferences:null, latest:null, lastPoll:0, connected:false, selected:null};
 let searchOpen=false;
 const commentDrafts=new Map(),expandedComments=new Map();
-let detailGeneration=0;
+let detailGeneration=0,navigationGeneration=0;
 const filterOptions=[['unread','Unread'],['awaiting','Awaiting acknowledgement'],['overdue','Past response deadline']];
 function filterMenu(view){return `<div class="view-filters" data-for="${view}" hidden>${filterOptions.map(([value,label])=>`<button type="button" class="view-filter" data-filter="${value}">${label}</button>`).join('')}</div>`;}
 const pageSize=30;
@@ -49,7 +49,7 @@ function setMobileNav(open) {
   toggle.setAttribute('aria-expanded',String(open));
   toggle.setAttribute('aria-label',open?'Close notifications menu':'Open notifications menu');
 }
-function showList(){const panel=$('#detail');if(!panel)return;panel.classList.remove('open');panel.dataset.id='';panel.innerHTML='<p class="detail-placeholder">Select a notification.</p>';}
+function showList(){navigationGeneration++;const panel=$('#detail');if(!panel)return;panel.classList.remove('open');panel.dataset.id='';panel.innerHTML='<p class="detail-placeholder">Select a notification.</p>';}
 const listKey=()=>[state.view,state.filter,state.search,state.page].join('\n');
 document.addEventListener('keydown',event=>{
   if(event.key!=='Escape' || event.target?.closest?.('dialog'))return;
@@ -57,7 +57,7 @@ document.addEventListener('keydown',event=>{
 },true);
 window.matchMedia('(max-width:900px)').addEventListener('change',event=>{if(!event.matches)setMobileNav(false);syncSearchPanel();});
 // Reload only what the route change affects; an already rendered detail is reused.
-window.addEventListener('hashchange',()=>{if(!pb.authStore.isValid)return;const list=listKey(),selected=state.selected;Object.assign(state,routeState());paintRoute();if(listKey()!==list)void loadList();if(!state.selected)showList();else if(state.selected!==selected || $('#detail')?.dataset.id!==state.selected)void openDetail(state.selected);else $('#detail').classList.add('open');});
+window.addEventListener('hashchange',()=>{navigationGeneration++;if(!pb.authStore.isValid)return;const list=listKey(),selected=state.selected;Object.assign(state,routeState());paintRoute();if(listKey()!==list)void loadList();if(!state.selected)showList();else if(state.selected!==selected || $('#detail')?.dataset.id!==state.selected)void openDetail(state.selected);else $('#detail').classList.add('open');});
 
 let sessionEpoch=0;
 const parseDate=value=>new Date(String(value).replace(' ','T'));
@@ -192,7 +192,7 @@ async function start() {
   $('#nav-toggle').onclick=()=>setMobileNav(!$('#notification-nav').classList.contains('open'));
   $('#nav-backdrop').onclick=()=>setMobileNav(false);
   all('[data-view]').forEach(button=>button.onclick=()=>{state.view=button.dataset.view;state.filter='all';state.page=0;state.selected=null;paintRoute();showList();saveRoute();void loadList();});
-  $('#search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.search=$('#search').value;state.page=0;saveRoute(true);void loadList();},250);};
+  $('#search').oninput=()=>{navigationGeneration++;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.search=$('#search').value;state.page=0;saveRoute(true);void loadList();},250);};
   all('.view-filter').forEach(button=>button.onclick=()=>{state.filter=button.dataset.filter;state.page=0;paintRoute();saveRoute();setMobileNav(false);void loadList();});
   $('#previous').onclick=()=>{state.page=Math.max(0,state.page-1);saveRoute();void loadList();};
   $('#next').onclick=()=>{state.page++;saveRoute();void loadList();};
@@ -236,43 +236,97 @@ function inboxRows() {
     LEFT JOIN notification_recipients fc ON fc.id=f.latest_recipient AND (s.latest_comment='' OR s.latest_comment IS NULL)
     WHERE s.activity_version>0`;
 }
-function listSql() {
-  const user=q(pb.authStore.record.id), archived=state.view==='archived';
-  if(state.view==='sent'){
+function listSql(scope=state,paginate=true) {
+  const user=q(pb.authStore.record.id), archived=scope.view==='archived';
+  if(scope.view==='sent'){
     let where=`n.sender=${user}`;
-    if(state.filter==='unread')where+=` AND EXISTS (SELECT 1 FROM notification_recipients ur WHERE ur.notification=n.id AND (ur.read_at='' OR ur.read_at IS NULL))`;
-    if(['awaiting','overdue'].includes(state.filter))where+=` ${state.filter==='awaiting'?'AND n.ack_required=1':''} AND ${visibleNote} AND EXISTS (SELECT 1 FROM notification_recipients ar WHERE ar.notification=n.id AND ar.acknowledged_at='')`;
-    if(state.filter==='overdue')where+=` AND n.due_at != '' AND n.due_at < ${q(new Date().toISOString().replace('T',' '))}`;
-    if(state.search)where+=` AND (${searchSql()})`;
-    return `SELECT n.id,n.sender,n.subject,substr(n.body_markdown,1,140) AS excerpt,n.kind,n.ack_required,n.withdrawn_at,n.created,NULL AS recipient_record,NULL AS read_at,NULL AS acknowledged_at,NULL AS archived_at,NULL AS recipient_revision,NULL AS feedback_record,NULL AS commenter,NULL AS conversation_record,NULL AS activity_version FROM notifications n WHERE ${where} ORDER BY n.created DESC,n.id DESC LIMIT ${pageSize+1} OFFSET ${state.page*pageSize}`;
+    if(scope.filter==='unread')where+=` AND EXISTS (SELECT 1 FROM notification_recipients ur WHERE ur.notification=n.id AND (ur.read_at='' OR ur.read_at IS NULL))`;
+    if(['awaiting','overdue'].includes(scope.filter))where+=` ${scope.filter==='awaiting'?'AND n.ack_required=1':''} AND ${visibleNote} AND EXISTS (SELECT 1 FROM notification_recipients ar WHERE ar.notification=n.id AND ar.acknowledged_at='')`;
+    if(scope.filter==='overdue')where+=` AND n.due_at != '' AND n.due_at < ${q(new Date().toISOString().replace('T',' '))}`;
+    if(scope.search)where+=` AND (${searchSql(scope)})`;
+    return `SELECT n.id,n.sender,n.subject,substr(n.body_markdown,1,140) AS excerpt,n.kind,n.ack_required,n.withdrawn_at,n.created,NULL AS recipient_record,NULL AS read_at,NULL AS acknowledged_at,NULL AS archived_at,NULL AS recipient_revision,NULL AS feedback_record,NULL AS commenter,NULL AS conversation_record,NULL AS activity_version FROM notifications n WHERE ${where} ORDER BY n.created DESC,n.id DESC${paginate?` LIMIT ${pageSize+1} OFFSET ${scope.page*pageSize}`:''}`;
   }
   let where=archived?"r.archived_at != ''":"(r.archived_at = '' OR r.archived_at IS NULL)";
   // Withdrawn records remain available by direct link and in Sent, never in active inbox counts.
   if(!archived)where+=` AND ${visibleNote}`;
-  if(state.filter==='unread')where+=" AND (r.read_at='' OR r.read_at IS NULL)";
-  if(['awaiting','overdue'].includes(state.filter))where+=` AND r.recipient_record IS NOT NULL ${state.filter==='awaiting'?'AND n.ack_required=1':''} AND ${visibleNote} AND (r.acknowledged_at='' OR r.acknowledged_at IS NULL)`;
-  if(state.filter==='overdue')where+=` AND n.due_at != '' AND n.due_at < ${q(new Date().toISOString().replace('T',' '))}`;
-  if(state.search)where+=` AND (${searchSql()})`;
-  return `SELECT ${listKeys.map(k=>'r.'+k).join(',')} FROM (${inboxRows()}) r JOIN notifications n ON n.id=r.id WHERE ${where} ORDER BY r.created DESC,r.id DESC LIMIT ${pageSize+1} OFFSET ${state.page*pageSize}`;
+  if(scope.filter==='unread')where+=" AND (r.read_at='' OR r.read_at IS NULL)";
+  if(['awaiting','overdue'].includes(scope.filter))where+=` AND r.recipient_record IS NOT NULL ${scope.filter==='awaiting'?'AND n.ack_required=1':''} AND ${visibleNote} AND (r.acknowledged_at='' OR r.acknowledged_at IS NULL)`;
+  if(scope.filter==='overdue')where+=` AND n.due_at != '' AND n.due_at < ${q(new Date().toISOString().replace('T',' '))}`;
+  if(scope.search)where+=` AND (${searchSql(scope)})`;
+  return `SELECT ${listKeys.map(k=>'r.'+k).join(',')} FROM (${inboxRows()}) r JOIN notifications n ON n.id=r.id WHERE ${where} ORDER BY r.created DESC,r.id DESC${paginate?` LIMIT ${pageSize+1} OFFSET ${scope.page*pageSize}`:''}`;
 }
-function searchSql(){
-  const term=q(state.search);
+function searchSql(scope=state){
+  const term=q(scope.search);
   return `n.id=${term} OR instr(lower(n.subject),lower(${term}))>0 OR instr(lower(n.body_markdown),lower(${term}))>0 OR EXISTS (SELECT 1 FROM notification_recipients sc WHERE sc.notification=n.id AND instr(lower(sc.acknowledgement_markdown),lower(${term}))>0) OR EXISTS (SELECT 1 FROM notification_comments cc WHERE cc.notification=n.id AND instr(lower(cc.body_markdown),lower(${term}))>0)`;
 }
 // One request per ordinary refresh: the current page (31st row probes for more) plus view-independent
 // unread total, latest 100 inbox IDs for alerts and the owner's preferences, even when the page is empty.
 async function inbox() {
-  const user=q(pb.authStore.record.id),list=listSql(),prefs='SELECT id, alerts_paused_until, revision FROM notification_preferences LIMIT 1';
+  const user=q(pb.authStore.record.id),list=listSql(),prefs='SELECT id, alerts_paused_until, auto_advance, revision FROM notification_preferences LIMIT 1';
   const latest=`SELECT r.id, r.created, r.id || ':' || r.activity_version AS activity_key FROM (${inboxRows()}) r WHERE r.withdrawn_at='' AND r.archived_at='' ORDER BY r.created DESC,r.id DESC LIMIT 100`;
   const unread=`SELECT count(*) AS total FROM (${inboxRows()}) r WHERE r.read_at='' AND r.archived_at='' AND r.withdrawn_at=''`;
   const selected=state.selected?`(SELECT s.revision || ':' || (SELECT n.revision FROM notifications n WHERE n.id=s.notification) || ':' || (SELECT count(*) FROM notification_comments c WHERE c.notification=s.notification) FROM notification_conversation_state s WHERE s.notification=${q(state.selected)})`:'NULL';
-  const [row]=await aggregate(`WITH page(${listKeys.join(', ')}) AS (${list}), latest(id, created, activity_key) AS (${latest}) SELECT ${selected} AS selected_version, (${unread}) AS unread, (SELECT json_group_array(json_object('id',id,'created',created,'activity_key',activity_key) ORDER BY created DESC, id DESC) FROM latest) AS latest, (SELECT json_group_array(json_object(${pairs(listKeys)}) ORDER BY created DESC, id DESC) FROM page) AS list, (SELECT json_object('id',id,'alerts_paused_until',alerts_paused_until,'revision',revision) FROM (${prefs})) AS preferences`) || [];
+  const [row]=await aggregate(`WITH page(${listKeys.join(', ')}) AS (${list}), latest(id, created, activity_key) AS (${latest}) SELECT ${selected} AS selected_version, (${unread}) AS unread, (SELECT json_group_array(json_object('id',id,'created',created,'activity_key',activity_key) ORDER BY created DESC, id DESC) FROM latest) AS latest, (SELECT json_group_array(json_object(${pairs(listKeys)}) ORDER BY created DESC, id DESC) FROM page) AS list, (SELECT json_object('id',id,'alerts_paused_until',alerts_paused_until,'auto_advance',auto_advance,'revision',revision) FROM (${prefs})) AS preferences`) || [];
   if(row)return {selectedVersion:row.selected_version,unread:Number(row.unread)||0,latest:JSON.parse(row.latest),list:JSON.parse(row.list),preferences:row.preferences?JSON.parse(row.preferences):null};
   // Bounded fallback for an oversized envelope: separate reads, the list paged by query()'s splitter.
   const records=await query(latest),total=await query(unread),preferences=await query(prefs);
   return {unread:Number(total[0]?.total)||0,latest:records,preferences:preferences[0] || null,list:await query(list)};
 }
-function loadList() { listGeneration++; return requestRefresh({urgent:true,visible:true}); }
+// Capture the user's result order before the write removes the source row. Window
+// functions return only one anchor/neighbor row, even across list page boundaries.
+function advanceRows(scope) {
+  return `WITH auto_advance_rows AS (SELECT id,created,ROW_NUMBER() OVER (ORDER BY created DESC,id DESC)-1 AS position,LAG(id) OVER (ORDER BY created DESC,id DESC) AS previous_id,LEAD(id) OVER (ORDER BY created DESC,id DESC) AS next_id FROM (${listSql(scope,false)}))`;
+}
+function advanceCurrent(context) {
+  return context.epoch===sessionEpoch && context.navigation===navigationGeneration && context.key===listKey() && state.selected===context.id;
+}
+async function prepareAdvance(id,action) {
+  const mode=state.preferences?.auto_advance || 'stay';
+  if(state.view!=='inbox' || !['archive','read_archive','acknowledge_archive'].includes(action) || !['next','previous','list'].includes(mode))return null;
+  captureEditors($('#detail'));
+  const context={id,mode,epoch:sessionEpoch,navigation:navigationGeneration,key:listKey(),scope:{view:state.view,filter:state.filter,search:state.search,page:state.page}};
+  if(mode!=='list'){
+    try { [context.anchor]=await query(`${advanceRows(context.scope)} SELECT * FROM auto_advance_rows WHERE id=${q(id)} LIMIT 1`); }
+    catch(error){context.error=error;}
+  }
+  return context;
+}
+async function finishAdvance(context) {
+  if(!context)return false;
+  if(!advanceCurrent(context)){if(context.epoch===sessionEpoch)await requestRefresh({urgent:true});return true;}
+  if(context.error){report(`Conversation archived. Unable to choose another conversation: ${friendly(context.error)}`,true);return false;}
+  let target;
+  if(context.anchor && context.mode!=='list'){
+    const candidate=context.anchor[context.mode==='next'?'next_id':'previous_id'];
+    // At the captured end, return to the list rather than wrapping or selecting a
+    // newly arrived conversation. Otherwise revalidate the neighbor and fall back
+    // to the nearest remaining row on the same side of the captured order anchor.
+    if(candidate){
+      const direction=context.mode==='next'?'<':'>',order=context.mode==='next'?'DESC':'ASC';
+      try {
+        [target]=await query(`${advanceRows(context.scope)} SELECT id,position FROM auto_advance_rows WHERE id!=${q(context.id)} AND (id=${q(candidate)} OR created${direction}${q(context.anchor.created)} OR (created=${q(context.anchor.created)} AND id${direction}${q(context.id)})) ORDER BY CASE WHEN id=${q(candidate)} THEN 0 ELSE 1 END,created ${order},id ${order} LIMIT 1`);
+      } catch(error){if(advanceCurrent(context))report(`Conversation archived. Unable to choose another conversation: ${friendly(error)}`,true);return !advanceCurrent(context);}
+    }
+  }
+  if(!advanceCurrent(context)){if(context.epoch===sessionEpoch)await requestRefresh({urgent:true});return true;}
+  let returnPage=context.scope.page;
+  if(!target){
+    try {
+      const [count]=await query(`${advanceRows(context.scope)} SELECT count(*) AS total FROM auto_advance_rows LIMIT 1`);
+      returnPage=Math.min(returnPage,Math.max(0,Math.ceil(Number(count.total)/pageSize)-1));
+    }catch(error){if(advanceCurrent(context))report(`Conversation archived. Unable to refresh the list: ${friendly(error)}`,true);return !advanceCurrent(context);}
+  }
+  if(!advanceCurrent(context)){if(context.epoch===sessionEpoch)await requestRefresh({urgent:true});return true;}
+  captureEditors($('#detail'));
+  // Keep the selected row on its actual page after removal or concurrent changes.
+  state.page=target?Math.floor(Number(target.position)/pageSize):returnPage;
+  listGeneration++;
+  if(target){await openDetail(target.id);if(state.selected===target.id && context.epoch===sessionEpoch){const heading=$('.detail-title');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}}}
+  else {state.selected=null;detailGeneration++;showList();saveRoute();$('#search')?.focus({preventScroll:true});}
+  if(context.epoch===sessionEpoch)await requestRefresh({urgent:true});
+  return true;
+}
+function loadList() { navigationGeneration++;listGeneration++; return requestRefresh({urgent:true,visible:true}); }
 function renderList(batch) {
   state.list=batch.slice(0,pageSize);
   const hasMore=batch.length>pageSize,pager=$('#pagination');
@@ -435,16 +489,19 @@ function bindConversation(notification,conversation,comments,epoch,generation){
     }catch(error){if(current())report(friendly(error),true);}finally{if(current())button.disabled=false;}
   };
   all('[data-conversation-action]').forEach(button=>button.onclick=async()=>{
-    all('[data-conversation-action]').forEach(item=>{item.disabled=true;});
+    const controls=all('[data-conversation-action]');controls.forEach(item=>{item.disabled=true;});
     try{
+      const advance=await prepareAdvance(id,button.dataset.conversationAction);
+      if(epoch!==sessionEpoch)return;
       await pb.collection('notification_conversation_state').update(conversation.id,{expected_revision:conversation.revision,action:button.dataset.conversationAction});
       if(epoch!==sessionEpoch)return;
+      if(await finishAdvance(advance))return;
       await requestRefresh({urgent:true});if(state.selected===id)await openDetail(id,true);
     }catch(error){
       if(epoch!==sessionEpoch)return;
       if(state.selected===id)await openDetail(id,true);
       report(error.status===409?'New activity arrived. Review the conversation before trying again.':friendly(error),true);
-    }
+    }finally{if(epoch===sessionEpoch)controls.forEach(control=>{if(control.isConnected)control.disabled=false;});}
   });
   const form=$('#comment-form');if(!form)return;
   const draft=commentDrafts.get(id)||{text:'',key:'',submitted:'',posting:false};commentDrafts.set(id,draft);
@@ -466,6 +523,7 @@ function bindConversation(notification,conversation,comments,epoch,generation){
   };
 }
 async function openDetail(id, preserve=false) {
+  if(!preserve)navigationGeneration++;
   captureEditors($('#detail'));
   const epoch=sessionEpoch,generation=++detailGeneration;
   let previousScroll=preserve?$('#detail')?.scrollTop||0:0;
@@ -494,15 +552,18 @@ async function openDetail(id, preserve=false) {
     bindConversation(notification,conversation,detail.comments,epoch,generation);
     bindActionMenus();
     $('#copy-record').onclick=()=>void navigator.clipboard.writeText(new URL(routeHref(id,true),location.href).href).then(()=>report('Link copied.')).catch(()=>report('Unable to copy link.',true));
-    $('#back').onclick=()=>{panel.classList.remove('open');state.selected=null;saveRoute();};
+    $('#back').onclick=()=>{navigationGeneration++;panel.classList.remove('open');state.selected=null;saveRoute();};
     all('[data-action]').forEach(button=>button.onclick=async()=>{
       const action=button.dataset.action,note=$('#ack-note')?.value || '';
       const controls=all('.actions button, .actions textarea');
       controls.forEach(control=>{control.disabled=true;});
       try {
+        const advance=await prepareAdvance(id,action);
+        if(epoch!==sessionEpoch)return;
         await pb.collection('notification_recipients').update(mine.id,{expected_revision:mine.revision,action,...(['acknowledge','acknowledge_archive'].includes(action)?{acknowledgement_markdown:note}:{})});
         if(epoch!==sessionEpoch)return;
         if(['acknowledge','acknowledge_archive'].includes(action))draft.ack='';
+        if(await finishAdvance(advance))return;
         // Own write: one urgent list refresh plus the detail re-read; the write itself is never retried.
         const refreshed=requestRefresh({urgent:true});
         if(state.selected===id){await openDetail(id);if(!['acknowledge','acknowledge_archive'].includes(action) && state.selected===id && $('#ack-note'))$('#ack-note').value=note;}
@@ -512,8 +573,11 @@ async function openDetail(id, preserve=false) {
     all('[data-feedback-action]').forEach(button=>button.onclick=async()=>{
       all('.feedback-actions button').forEach(b=>{b.disabled=true;});
       try{
+        const advance=await prepareAdvance(id,button.dataset.feedbackAction);
+        if(epoch!==sessionEpoch)return;
         await pb.collection('notification_feedback').update(feedback.id,{expected_revision:feedback.revision,action:button.dataset.feedbackAction});
         if(epoch!==sessionEpoch)return;
+        if(await finishAdvance(advance))return;
         await requestRefresh({urgent:true});if(state.selected===id)await openDetail(id);
       }catch(error){
         if(epoch!==sessionEpoch)return;
@@ -525,7 +589,7 @@ async function openDetail(id, preserve=false) {
     all('.notification-row').forEach(button=>button.classList.toggle('selected',button.dataset.id===id));
     panel.dataset.id=id;panel.dataset.version=conversation?`${conversation.revision}:${notification.revision}:${notification.comment_total||0}`:'';if(preserve)panel.scrollTop=previousScroll;
     if(editorFocus){const control=document.getElementById(editorFocus.id);if(control && !control.disabled && !control.closest('[hidden]')){control.focus({preventScroll:true});if(typeof control.setSelectionRange==='function')control.setSelectionRange(editorFocus.start,editorFocus.end,editorFocus.direction);control.scrollTop=editorFocus.scrollTop;}}
-  }catch(error){if(epoch!==sessionEpoch || generation!==detailGeneration || state.selected!==id)return;if(!error.final && (error.busy || !error.status || error.status>=500 || error.status===408))detailRetry={epoch,id};panel.innerHTML=`<button class="text-button" id="error-back">← Back to inbox</button><div class="empty"><p>${e(friendly(error))}</p></div>`;$('#error-back').onclick=()=>{panel.classList.remove('open');state.selected=null;saveRoute();};}
+  }catch(error){if(epoch!==sessionEpoch || generation!==detailGeneration || state.selected!==id)return;if(!error.final && (error.busy || !error.status || error.status>=500 || error.status===408))detailRetry={epoch,id};panel.innerHTML=`<button class="text-button" id="error-back">← Back to inbox</button><div class="empty"><p>${e(friendly(error))}</p></div>`;$('#error-back').onclick=()=>{navigationGeneration++;panel.classList.remove('open');state.selected=null;saveRoute();};}
 }
 function dialog(content,setup) {
   const modal=$('#dialog');modal.innerHTML=`<button class="dialog-close icon-button" aria-label="Close dialog">×</button>${content}`;$('.dialog-close').onclick=()=>modal.close();modal.showModal();setup?.(modal);
@@ -560,8 +624,19 @@ function withdraw(notification) {
   });
 }
 function settings() {
-  const current=statusFor(pb.authStore.record.id),availability=effectiveStatus(current);
-  dialog(`<p class="eyebrow">YOUR AVAILABILITY</p><h2>Let colleagues know</h2><form id="status-form"><label>Status<select name="availability" aria-label="Status">${['not_set','available','busy','in_a_meeting','away'].map(value=>`<option value="${value}" ${availability===value?'selected':''}>${statusLabel(value)}</option>`).join('')}</select></label><label>Short message <span class="optional">optional</span><input name="message" value="${e(current?.message||'')}" maxlength="200" placeholder="Reviewing the quarterly plan"></label><label>Clear status after<select name="expiry" aria-label="Clear status after"><option value="30">30 minutes</option><option value="60" selected>1 hour</option><option value="240">4 hours</option><option value="day">End of day</option></select></label><p class="fine">Availability is shared with colleagues. It does not block notifications.</p><button class="primary">Save status</button></form><hr><h3>Desktop alerts</h3><p class="muted">Pause alerts separately. New notifications still reach your inbox.</p><form id="pause-form"><label>Pause duration<select name="duration" aria-label="Pause duration"><option value="0">Resume alerts</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="240">4 hours</option></select></label><button class="secondary">Save alert preference</button></form><p class="fine">${state.preferences?.alerts_paused_until && parseDate(state.preferences.alerts_paused_until)>new Date()?`Paused until ${e(date(state.preferences.alerts_paused_until))}`:'Alerts are not paused.'} This app must remain open for desktop alerts.</p><p id="form-error" class="form-error" role="alert"></p>`,()=>{
+  const current=statusFor(pb.authStore.record.id),availability=effectiveStatus(current),epoch=sessionEpoch;
+  dialog(`<h2>Settings</h2><h3>General</h3><form id="general-form"><label>After archiving a conversation<select name="auto_advance">${[['stay','Stay on conversation'],['next','Next conversation (older)'],['previous','Previous conversation (newer)'],['list','Return to list']].map(([value,label])=>`<option value="${value}" ${(state.preferences?.auto_advance||'stay')===value?'selected':''}>${label}</option>`).join('')}</select></label><p class="fine">Applies to archive actions in Inbox, including combined actions. Keeps your search and filters. Opening another conversation does not mark it read.</p><button class="secondary">Save general settings</button></form><hr><h3>Your availability</h3><form id="status-form"><label>Status<select name="availability" aria-label="Status">${['not_set','available','busy','in_a_meeting','away'].map(value=>`<option value="${value}" ${availability===value?'selected':''}>${statusLabel(value)}</option>`).join('')}</select></label><label>Short message <span class="optional">optional</span><input name="message" value="${e(current?.message||'')}" maxlength="200" placeholder="Reviewing the quarterly plan"></label><label>Clear status after<select name="expiry" aria-label="Clear status after"><option value="30">30 minutes</option><option value="60" selected>1 hour</option><option value="240">4 hours</option><option value="day">End of day</option></select></label><p class="fine">Availability is shared with colleagues. It does not block notifications.</p><button class="primary">Save status</button></form><hr><h3>Desktop alerts</h3><p class="muted">Pause alerts separately. New notifications still reach your inbox.</p><form id="pause-form"><label>Pause duration<select name="duration" aria-label="Pause duration"><option value="0">Resume alerts</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="240">4 hours</option></select></label><button class="secondary">Save alert preference</button></form><p class="fine">${state.preferences?.alerts_paused_until && parseDate(state.preferences.alerts_paused_until)>new Date()?`Paused until ${e(date(state.preferences.alerts_paused_until))}`:'Alerts are not paused.'} This app must remain open for desktop alerts.</p><p id="form-error" class="form-error" role="alert"></p>`,()=>{
+    $('#general-form').onsubmit=async event=>{
+      event.preventDefault();const form=event.target,button=form.querySelector('button'),preference=state.preferences;
+      button.disabled=true;
+      try {
+        const body={auto_advance:new FormData(form).get('auto_advance')};
+        const saved=preference?await pb.collection('notification_preferences').update(preference.id,{...body,expected_revision:preference.revision}):await pb.collection('notification_preferences').create(body);
+        if(epoch!==sessionEpoch || !form.isConnected || !$('#dialog').open)return;
+        state.preferences=saved;$('#dialog').close();report('General settings saved.');await requestRefresh({urgent:true});
+      }catch(error){if(epoch===sessionEpoch && form.isConnected && $('#dialog').open)$('#form-error').textContent=friendly(error);}
+      finally{if(epoch===sessionEpoch && form.isConnected)button.disabled=false;}
+    };
     $('#status-form').onsubmit=async event=>{event.preventDefault();const data=new FormData(event.target),until=data.get('expiry')==='day'?new Date(new Date().setHours(23,59,59,999)):new Date(Date.now()+Number(data.get('expiry'))*60000);try{const body={availability:data.get('availability'),message:data.get('message'),expires_at:data.get('availability')==='not_set'?'':until.toISOString()};if(current)await pb.collection('user_status').update(current.id,{...body,expected_revision:current.revision});else await pb.collection('user_status').create(body);$('#dialog').close();report('Availability updated.');await directory().catch(()=>{state.directoryAt=0;});}catch(error){if($('#form-error'))$('#form-error').textContent=friendly(error);else report(friendly(error),true);}};
     $('#pause-form').onsubmit=async event=>{event.preventDefault();const duration=Number(new FormData(event.target).get('duration'));try{const body={alerts_paused_until:duration?new Date(Date.now()+duration*60000).toISOString():''};if(state.preferences)await pb.collection('notification_preferences').update(state.preferences.id,{...body,expected_revision:state.preferences.revision});else await pb.collection('notification_preferences').create(body);$('#dialog').close();report(duration?'Desktop alerts paused. Your inbox keeps receiving notifications.':'Desktop alerts resumed.');await requestRefresh({urgent:true});updateAlerts();}catch(error){if($('#form-error'))$('#form-error').textContent=friendly(error);else report(friendly(error),true);}};
   });

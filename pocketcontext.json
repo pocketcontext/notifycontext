@@ -75,6 +75,7 @@
       "id",
       "user",
       "alerts_paused_until",
+      "auto_advance",
       "revision",
       "created",
       "updated"

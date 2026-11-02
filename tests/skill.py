@@ -77,7 +77,13 @@ def main():
         status = json.loads(cli('create', 'user_status', '{"availability":"busy","message":"Supplier review"}'))
         cli('update', 'user_status', status['id'], json.dumps(dict(expected_revision=status['revision'], availability='available')))
         cli('update', 'user_status', status['id'], json.dumps(dict(expected_revision=status['revision'], availability='away')), expected=4)
-        cli('create', 'notification_preferences', '{"alerts_paused_until":"2099-01-01T12:00:00Z"}')
+        preference = json.loads(cli('create', 'notification_preferences', '{"alerts_paused_until":"2099-01-01T12:00:00Z"}'))
+        assert preference['auto_advance'] == 'stay'
+        preference = json.loads(cli('update', 'notification_preferences', preference['id'], json.dumps({
+            'expected_revision': preference['revision'], 'auto_advance': 'next'})))
+        assert preference['auto_advance'] == 'next' and preference['alerts_paused_until']
+        cli('update', 'notification_preferences', preference['id'], json.dumps({
+            'expected_revision': preference['revision'], 'auto_advance': 'invalid'}), expected=1)
         cli('update', 'notification_recipients', row['id'], '{"action":"read"}', expected=2)
         env['NOTIFYCONTEXT_USER_EMAIL'] = 'sender@example.com'
         assert json.loads(cli('backlog', '--sent', '--include-archived'))['count'] == 5

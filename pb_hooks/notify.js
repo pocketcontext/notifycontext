@@ -142,13 +142,20 @@ function updateFeedback(app,id,r,b){
   return bump(app,r);
 }
 function personal(app,id,table,r,b){
-  const fresh=!r,fields=table==='user_status'?['availability','message','expires_at']:['alerts_paused_until'];only(b,fields.concat(fresh?[]:['expected_revision']));
+  const fresh=!r,fields=table==='user_status'?['availability','message','expires_at']:['alerts_paused_until','auto_advance'];only(b,fields.concat(fresh?[]:['expected_revision']));
   if(fresh){if(rows(app,table,'user = {:id}',{id}).length)conflict();r=new Record(app.findCollectionByNameOrId(table));r.set('user',id);r.set('revision',1);}else{if(r.getString('user')!==id)denied();revision(b,r);}
   if(table==='user_status'){
     if(fresh||b.availability!==undefined){if(!['available','busy','in_a_meeting','away','not_set'].includes(b.availability))invalid('Invalid availability');r.set('availability',b.availability);}
     if(b.message!==undefined)r.set('message',str(b.message,'message',200));
     if(b.expires_at!==undefined)r.set('expires_at',date(b.expires_at,'expires_at'));
-  }else if(b.alerts_paused_until!==undefined)r.set('alerts_paused_until',date(b.alerts_paused_until,'alerts_paused_until'));
+  }else{
+    if(b.alerts_paused_until!==undefined)r.set('alerts_paused_until',date(b.alerts_paused_until,'alerts_paused_until'));
+    if(fresh || b.auto_advance!==undefined){
+      const value=b.auto_advance===undefined?'stay':b.auto_advance;
+      if(!['stay','next','previous','list'].includes(value))invalid('Invalid auto-advance preference');
+      r.set('auto_advance',value);
+    }
+  }
   if(fresh)app.save(r);else bump(app,r);return r;
 }
 // Rebind original JSON: PocketBase's loaded requestInfo body has already coerced
