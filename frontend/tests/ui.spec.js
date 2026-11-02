@@ -1,8 +1,10 @@
 import {test,expect} from '@playwright/test';
+import {mkdir} from 'node:fs/promises';
 async function revealAction(page,name,feedback=false){
- const button=page.getByRole('button',{name,exact:true});
- const toggle=page.getByRole('button',{name:feedback?'Other feedback actions':'Other message actions',exact:true});
- await expect(page.locator('.actions button:disabled')).toHaveCount(0);
+ const conversation=name.includes('conversation'),label=conversation?name.replace(' conversation',''):name;
+ const button=(conversation?page.locator('.conversation-triage'):page).getByRole('button',{name:label,exact:true});
+ const toggle=page.getByRole('button',{name:name.includes('conversation')?'Other conversation actions':feedback?'Other feedback actions':'Other message actions',exact:true});
+ await expect(page.locator('.actions button:disabled, .conversation-triage button:disabled')).toHaveCount(0);
  await expect.poll(async()=>await button.isVisible() || await toggle.isVisible()).toBe(true);
  if(!await button.isVisible())await toggle.click();
  return button;
@@ -48,12 +50,12 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
   const noteFor=(sql,viewer)=>{const id=literal(sql,/(?:n\.id|WHERE id)=\'([a-z0-9]{15})\'/);const n=notes.find(item=>item.id===id);return n && visibleNote(n,viewer)?n:null;};
   const peopleFor=(n,viewer)=>recipients.filter(r=>r.notification===n.id && (n.sender===viewer || r.recipient===viewer)).map(({notification,...r})=>({...r,recipient_name:r.recipient_name ?? users[r.recipient] ?? null}));
   const refsFor=n=>n.id===notes[0]?.id?[{id:'ref000000000001',kind:'url',label:'Supporting document',url:'https://example.com',created:now}]:[];
-  const detailNote=(n,viewer)=>{const {submission_key,updated,...fields}=n;return {...fields,...(conversation?{conversation:JSON.stringify(conversationState)}:{}),recipient_total:peopleFor(n,viewer).length,reference_total:refsFor(n).length};};
+  const detailNote=(n,viewer)=>{const {submission_key,updated,...fields}=n;return {...fields,...(conversation?{conversation:JSON.stringify(conversationState),comment_total:comments.length}:{}),recipient_total:peopleFor(n,viewer).length,reference_total:refsFor(n).length};};
   function answer(sql,viewer) {
     const kind=classify(sql),n=['detail','note'].includes(kind)?noteFor(sql,viewer):null;
     if(oversize.has(kind))return {columns:['x'],rows:[],truncated:true};
     if(kind==='comments'){const before=Number(sql.match(/sequence<(\d+)/)?.[1]||0);return result(comments.filter(c=>!before || c.sequence<before).slice().reverse().slice(0,31));}
-    if(kind==='inbox'){const list=sql.slice(sql.indexOf(' AS (')+5,sql.indexOf('), latest(id, created, activity_key) AS ('));return result([{unread:unread(viewer),latest:JSON.stringify(latest(viewer)),list:JSON.stringify(listRows(list,viewer)),preferences:prefs()[0]?JSON.stringify(prefs()[0]):null}]);}
+    if(kind==='inbox'){const list=sql.slice(sql.indexOf(' AS (')+5,sql.indexOf('), latest(id, created, activity_key) AS ('));const selected=literal(sql,/WHERE s\.notification='([a-z0-9]{15})'/);const selectedNote=notes.find(n=>n.id===selected);return result([{selected_version:conversation && selectedNote?`${conversationState.revision}:${selectedNote.revision}:${comments.length}`:null,unread:unread(viewer),latest:JSON.stringify(latest(viewer)),list:JSON.stringify(listRows(list,viewer)),preferences:prefs()[0]?JSON.stringify(prefs()[0]):null}]);}
     if(kind==='detail')return result(n?[{...detailNote(n,viewer),recipients:JSON.stringify(peopleFor(n,viewer)),refs:JSON.stringify(refsFor(n)),comments:JSON.stringify(comments.slice().reverse().slice(0,31))}]:[]);
     if(kind==='directory'){const {offset,limit}=page31(sql);return result(directory().slice(offset,offset+limit));}
     if(kind==='note')return result(n?[sql.startsWith('SELECT * ')?n:detailNote(n,viewer)]:[]);
@@ -89,8 +91,9 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
       writes.push({path:url.pathname,body});
       const recipient=recipients.find(r=>url.pathname.endsWith('/'+r.id));
       if(url.pathname.includes('/notification_comments/')){data=comments.find(c=>c.submission_key===body.submission_key);if(!data){data={id:'comment'+String(comments.length+1).padStart(8,'0'),author:user,created:now,sequence:comments.length+1,...body};comments.push(data);}}
-      else if(url.pathname.includes('/notification_conversation_state/')){if(['read','read_archive'].includes(body.action)){conversationState.read_at=now;recipients[0].read_at=now;}if(['archive','read_archive'].includes(body.action)){conversationState.archived_at=now;recipients[0].archived_at=now;}conversationState.revision++;data=conversationState;}
+      else if(url.pathname.includes('/notification_conversation_state/')){if(['read','read_archive'].includes(body.action)){conversationState.read_at=now;recipients[0].read_at=now;}if(['archive','read_archive'].includes(body.action)){conversationState.archived_at=now;recipients[0].archived_at=now;}if(body.action==='unarchive'){conversationState.archived_at='';recipients[0].archived_at='';}conversationState.revision++;data=conversationState;}
       else if(recipient){if(['archive','read_archive','acknowledge_archive'].includes(body.action))recipient.archived_at=now;if(body.action==='unarchive')recipient.archived_at='';if(['read','read_archive','acknowledge_archive'].includes(body.action))recipient.read_at=now;if(['acknowledge','acknowledge_archive'].includes(body.action)){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}recipient.revision++;data=recipient;}
+      else if(url.pathname.includes('/notifications/records/') && body.action==='withdraw'){const n=notes.find(n=>url.pathname.endsWith('/'+n.id));Object.assign(n,{withdrawn_at:now,withdrawal_reason:body.withdrawal_reason,revision:n.revision+1});data=n;}
       else if(url.pathname.includes('notification_preferences')){preference={id:'prefs0000000001',revision:(preference?.revision || 0)+1,...body};delete preference.expected_revision;data=preference;}
       else if(url.pathname.includes('user_status')){const status={id:'status000000001',user,revision:1,...body};statuses.splice(0,statuses.length,status);data=status;}
       else data={...initial,id:'created00000001',...body};
@@ -101,6 +104,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
   await page.goto('/');if(!restore){await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();}await expect(page.locator('#view-title')).toHaveText('Inbox');await expect(page.locator('#filter-label')).toHaveText('All');await expect(page.locator('#connection')).toContainText('Connected');
   return {writes,queries,oversize,tooBig,releaseRead,comments,conversationState,notes:()=>notes,recipients:()=>recipients,
     kinds:(from=0)=>queries.slice(from).map(query=>query.kind),
+    incomingComment(body='New comment from colleague'){comments.push({id:'comment'+String(comments.length+1).padStart(8,'0'),notification:notes[0].id,author:sender,body_markdown:body,sequence:comments.length+1,created:new Date().toISOString()});conversationState.revision++;conversationState.activity_version++;conversationState.read_at='';conversationState.archived_at='';recipients[0].read_at='';recipients[0].archived_at='';},
     setUnread(value){unreadOverride=value;},
     setPreference(value){preference=value;},
     addNotification(){notes.unshift({...initial,id:'new000000000001',created:new Date().toISOString(),subject:'New update'});recipients.unshift({id:'newrec000000001',notification:'new000000000001',recipient:user,revision:1,read_at:'',acknowledged_at:'',archived_at:'',acknowledgement_markdown:'',addressed_email:'',claimed_at:'',claim_expires_at:'',created:now});}};
@@ -114,15 +118,15 @@ test('safe Markdown detail and explicit recipient actions',async({page})=>{
   const handoff=page.locator('article a',{hasText:'handoff'});await expect(handoff).toHaveAttribute('target','_blank');await expect(handoff).toHaveAttribute('rel','noopener noreferrer');
   await expect(page.locator('article a[href^="mailto:"]')).not.toHaveAttribute('target',/./);
   expect(writes).toHaveLength(0);
-  await page.getByLabel('Optional acknowledgement note').fill('Draft survives marking read.');
+  await page.locator('#ack-note').fill('Draft survives marking read.');
   await chooseAction(page,'Mark read');await expect.poll(()=>writes.length).toBe(1);expect(writes[0].body.action).toBe('read');
-  await expect(page.getByLabel('Optional acknowledgement note')).toBeDisabled();
+  await expect(page.locator('#ack-note')).toBeDisabled();
   await expect(page.getByRole('button',{name:'Acknowledge',exact:true})).toBeDisabled();
   await expect(page.getByRole('button',{name:'Archive',exact:true})).toBeDisabled();
   releaseRead();
   await expect(page.getByRole('button',{name:'Mark read',exact:true})).toHaveCount(0);
-  await expect(page.getByLabel('Optional acknowledgement note')).toHaveValue('Draft survives marking read.');
-  await page.getByLabel('Optional acknowledgement note').fill('Received, reviewing tomorrow.');await chooseAction(page,'Acknowledge');await expect(page.locator('.acknowledgement')).toContainText('Received, reviewing tomorrow.');expect(writes[1].body.action).toBe('acknowledge');
+  await expect(page.locator('#ack-note')).toHaveValue('Draft survives marking read.');
+  await page.locator('#ack-note').fill('Received, reviewing tomorrow.');await chooseAction(page,'Acknowledge');await expect(page.locator('.acknowledgement')).toContainText('Received, reviewing tomorrow.');expect(writes[1].body.action).toBe('acknowledge');
 });
 test('complete backlog pagination and search',async({page})=>{
   await setup(page,{count:65});await expect(page.locator('.notification-row')).toHaveCount(30);await page.getByRole('button',{name:'Next →'}).click();await expect(page.locator('#page-label')).toHaveText('Page 2');await expect(page.locator('.notification-row')).toHaveCount(30);await page.getByRole('button',{name:'Next →'}).click();await expect(page.locator('.notification-row')).toHaveCount(5);await expect(page.getByRole('button',{name:'Next →'})).toBeDisabled();await page.getByRole('searchbox').fill('missing');await expect(page.getByRole('heading',{name:'No matching notifications'})).toBeVisible();
@@ -130,7 +134,7 @@ test('complete backlog pagination and search',async({page})=>{
 test('composer, settings, keyboard focus and mobile layout',async({page})=>{
   await page.setViewportSize({width:390,height:844});const {writes}=await setup(page);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.getByRole('button',{name:'New notification'}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByLabel('To',{exact:true}).selectOption(sender);await page.getByLabel('Subject',{exact:true}).fill('Please review the budget');await page.locator('#body').fill('**Budget** review\n\n- Check totals');await page.getByText('Preview Markdown',{exact:true}).click();await expect(page.locator('#preview strong')).toHaveText('Budget');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();expect(writes[0].body.subject).toBe('Please review the budget');expect(writes[0].body.submission_key).toBeTruthy();
+  await page.getByRole('button',{name:'New notification'}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByLabel('To',{exact:true}).selectOption(sender);await page.getByLabel('Subject',{exact:true}).fill('Please review the budget');await page.locator('#body').fill('**Budget** review\n\n- Check totals');await page.locator('[data-editor-id=body]').getByRole('tab',{name:'Preview',exact:true}).click();await expect(page.locator('#preview strong')).toHaveText('Budget');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();expect(writes[0].body.subject).toBe('Please review the budget');expect(writes[0].body.submission_key).toBeTruthy();
   await page.getByRole('button',{name:'← Back to inbox'}).click();await page.getByRole('button',{name:'Open notifications menu',exact:true}).click();await page.locator('#settings').click();await page.getByLabel('Status',{exact:true}).selectOption('busy');await page.getByRole('button',{name:'Save status'}).click();expect(writes[1].body.availability).toBe('busy');expect(writes[1].body.user).toBeUndefined();
   await page.locator('#settings').click();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).not.toBeVisible();await expect(page.locator('#settings')).toBeFocused();
   await page.screenshot({path:'/tmp/notifycontext-mobile.png',fullPage:true});
@@ -465,14 +469,14 @@ test('concurrent realtime, manual, visibility and online refreshes coalesce',asy
  const burst=()=>page.evaluate(()=>{for(let i=0;i<10;i++){window.inboxSignal();document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'));}});
  await burst();await page.waitForTimeout(300);await burst();
  await expect(page).toHaveTitle('(2) NotifyContext');await settle(page);await settle(page);
- let kinds=mock.kinds(mark);expect(kinds.every(kind=>kind==='inbox')).toBe(true);expect(kinds.length).toBeGreaterThanOrEqual(1);expect(kinds.length).toBeLessThanOrEqual(2);
+ let kinds=mock.kinds(mark);expect(kinds.every(kind=>kind==='inbox'),JSON.stringify(kinds)).toBe(true);expect(kinds.length).toBeGreaterThanOrEqual(1);expect(kinds.length).toBeLessThanOrEqual(2);
  const times=mock.queries.slice(mark).map(query=>query.at);// Measured at request arrival, so allow for latency jitter around the 2 s browser-side interval.
  for(let i=1;i<times.length;i++)expect(times[i]-times[i-1]).toBeGreaterThanOrEqual(1700);
  // Manual refreshes skip the interval but share the queue: two clicks plus a burst are at most one read per click plus one follow-up.
  mark=mock.queries.length;
  await page.getByRole('button',{name:'Refresh notifications'}).click();await page.getByRole('button',{name:'Refresh notifications'}).click();await burst();
  await settle(page);await settle(page);
- kinds=mock.kinds(mark);expect(kinds.every(kind=>kind==='inbox')).toBe(true);expect(kinds.length).toBeGreaterThanOrEqual(1);expect(kinds.length).toBeLessThanOrEqual(3);
+ kinds=mock.kinds(mark);expect(kinds.every(kind=>kind==='inbox'),JSON.stringify(kinds)).toBe(true);expect(kinds.length).toBeGreaterThanOrEqual(1);expect(kinds.length).toBeLessThanOrEqual(3);
 });
 test('oversized aggregates fall back to complete separate reads',async({page})=>{
  const mock=await setup(page,{count:2,pending:true});mock.oversize.add('inbox');mock.tooBig.add('detail');
@@ -560,7 +564,7 @@ test('split action runs one combined request and dropdown keeps independent choi
  await page.keyboard.press('ArrowDown');await expect(page.getByRole('button',{name:'Mark read',exact:true})).toBeFocused();
  await page.keyboard.press('Escape');await expect(toggle).toHaveAttribute('aria-expanded','false');
  expect(writes).toHaveLength(0);
- await page.getByLabel('Optional acknowledgement note').fill('Received and understood.');
+ await page.locator('#ack-note').fill('Received and understood.');
  await page.getByRole('button',{name:'Acknowledge & archive',exact:true}).click();
  await expect(page.locator('.acknowledgement')).toContainText('Received and understood.');
  expect(writes).toHaveLength(1);expect(writes[0].body).toMatchObject({action:'acknowledge_archive',acknowledgement_markdown:'Received and understood.'});
@@ -585,20 +589,20 @@ test('shared conversation allows repeated safe comments without acknowledgement 
  const mock=await setup(page,{conversation:true});
  await page.locator('.notification-row').click();await expect(page.locator('#conversation-heading')).toHaveText('Conversation');
  expect(mock.writes).toHaveLength(0);
- await page.getByLabel('Add a comment').fill('**First comment** [context](https://example.com) <img src=x onerror="window.attacked=true">');
+ await page.locator('#comment-body').fill('**First comment** [context](https://example.com) <img src=x onerror="window.attacked=true">');
  await page.getByRole('button',{name:'Post comment',exact:true}).click();
  await expect(page.locator('.conversation-comment')).toHaveCount(1);
  await expect(page.locator('.conversation-comment strong').last()).toHaveText('First comment');
  await expect(page.locator('.conversation-comment img')).toHaveCount(0);
  await expect(page.locator('.conversation-comment a')).toHaveAttribute('rel','noopener noreferrer');
- await page.getByLabel('Add a comment').fill('Second comment');await page.getByRole('button',{name:'Post comment',exact:true}).click();
+ await page.locator('#comment-body').fill('Second comment');await page.getByRole('button',{name:'Post comment',exact:true}).click();
  await expect(page.locator('.conversation-comment')).toHaveCount(2);
  expect(mock.writes.map(w=>w.path)).toEqual(Array(2).fill('/api/collections/notification_comments/records'));
  expect(mock.writes[0].body.submission_key).not.toBe(mock.writes[1].body.submission_key);
  expect(mock.recipients()[0].acknowledged_at).toBe('');
- await page.getByLabel('Add a comment').fill('Draft survives opening details again');
- await page.locator('.notification-row').click();await expect(page.getByLabel('Add a comment')).toHaveValue('Draft survives opening details again');
- await page.getByRole('button',{name:'Mark conversation read',exact:true}).click();await expect(page.getByLabel('Add a comment')).toHaveValue('Draft survives opening details again');
+ await page.locator('#comment-body').fill('Draft survives opening details again');
+ await page.locator('.notification-row').click();await expect(page.locator('#comment-body')).toHaveValue('Draft survives opening details again');
+ await chooseAction(page,'Mark conversation read');await expect(page.locator('#comment-body')).toHaveValue('Draft survives opening details again');
  expect(mock.writes.at(-1).body.action).toBe('read');
 });
 
@@ -607,9 +611,9 @@ test('uncertain comment posting keeps a stable retry key and full draft',async({
  await page.route('**/api/collections/notification_comments/records',async route=>{
   if(first){first=false;mock.writes.push({path:new URL(route.request().url()).pathname,body:route.request().postDataJSON()});await route.abort('failed');}else await route.fallback();
  });
- await page.locator('.notification-row').click();await page.getByLabel('Add a comment').fill('Retry this exact comment');
+ await page.locator('.notification-row').click();await page.locator('#comment-body').fill('Retry this exact comment');
  await page.getByRole('button',{name:'Post comment',exact:true}).click();await expect(page.locator('#comment-error')).not.toBeEmpty();
- await expect(page.getByLabel('Add a comment')).toHaveValue('Retry this exact comment');
+ await expect(page.locator('#comment-body')).toHaveValue('Retry this exact comment');
  await page.getByRole('button',{name:'Post comment',exact:true}).click();await expect(page.locator('.conversation-comment')).toHaveCount(1);
  expect(mock.writes[0].body).toEqual(mock.writes[1].body);
 });
@@ -624,4 +628,179 @@ test('long conversation pages chronologically on mobile and withdrawn threads ar
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(mock.writes).toHaveLength(0);
  mock.notes()[0].withdrawn_at=now;mock.notes()[0].withdrawal_reason='No longer needed';
  await page.getByRole('button',{name:'← Back to inbox',exact:true}).click();await page.locator('.notification-row').click();await expect(page.locator('#comment-form')).toHaveCount(0);await expect(page.locator('.conversation')).toContainText('closed to new comments');
+});
+
+const editor=(page,id)=>page.locator(`.markdown-editor[data-editor-id="${id}"]`);
+const editorTab=(page,id,name)=>editor(page,id).getByRole('tab',{name,exact:true});
+const unsafeMarkdown='**Safe emphasis** [context](https://example.com) [bad](javascript:window.attacked=true) <img src=x onerror="window.attacked=true">';
+async function assertSafePreview(page,id){
+ await editorTab(page,id,'Preview').click();
+ await expect(page.locator(`#${id}`)).toBeHidden();
+ const preview=page.locator(`#${id}-preview-panel`);
+ await expect(preview.locator('strong')).toHaveText('Safe emphasis');
+ await expect(preview.locator('img,script,a[href^="javascript:"]')).toHaveCount(0);
+ await expect(preview.locator('a[href="https://example.com"]')).toHaveAttribute('target','_blank');
+ await expect(preview.locator('a[href="https://example.com"]')).toHaveAttribute('rel','noopener noreferrer');
+ expect(await page.evaluate(()=>window.attacked)).toBeUndefined();
+}
+
+test('all Markdown editors offer safe Preview and submit their exact text from Preview',async({page})=>{
+ const mock=await setup(page,{conversation:true});
+ await page.locator('.notification-row').click();
+ await page.locator('#ack-note').fill(unsafeMarkdown);await assertSafePreview(page,'ack-note');
+ await chooseAction(page,'Acknowledge');await expect(page.locator('.acknowledgement strong')).toHaveText('Safe emphasis');
+ expect(mock.writes.at(-1).body.acknowledgement_markdown).toBe(unsafeMarkdown);
+ await page.locator('#comment-body').fill(unsafeMarkdown);await assertSafePreview(page,'comment-body');
+ await page.getByRole('button',{name:'Post comment',exact:true}).click();await expect(page.locator('.conversation-comment')).toHaveCount(1);
+ expect(mock.writes.at(-1).body.body_markdown).toBe(unsafeMarkdown);
+ await page.getByRole('button',{name:'New notification',exact:true}).click();
+ await page.getByLabel('To',{exact:true}).selectOption(sender);await page.getByLabel('Subject',{exact:true}).fill('Preview publication');
+ await page.locator('#body').fill(unsafeMarkdown);await assertSafePreview(page,'body');
+ await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.locator('#dialog')).not.toBeVisible();
+ expect(mock.writes.at(-1).body.body_markdown).toBe(unsafeMarkdown);
+});
+
+test('withdrawal previews and saves sanitized Markdown with an exact payload',async({page})=>{
+ const mock=await setup(page,{pending:true,conversation:true});
+ await page.getByRole('button',{name:'Sent',exact:false}).click();await page.locator('.notification-row').click();
+ await page.getByRole('button',{name:'Withdraw notification',exact:true}).click();
+ await page.locator('#withdrawal-reason').fill(unsafeMarkdown);await assertSafePreview(page,'withdrawal-reason');
+ await page.getByRole('button',{name:'Withdraw',exact:true}).click();await expect(page.locator('#dialog')).not.toBeVisible();
+ expect(mock.writes.at(-1).body.withdrawal_reason).toBe(unsafeMarkdown);
+ await expect(page.locator('#detail .notice strong').filter({hasText:'Safe emphasis'})).toHaveCount(1);
+ await expect(page.locator('#detail .notice img,#detail .notice a[href^="javascript:"]')).toHaveCount(0);
+ await expect(page.locator('#comment-form')).toHaveCount(0);
+});
+
+for(const field of ['body','comment-body','withdrawal-reason']){
+ test(`empty required ${field} returns from Preview to Write without sending`,async({page})=>{
+  const mock=await setup(page,{conversation:true,pending:field==='withdrawal-reason'});
+  let submit;
+  if(field==='body'){
+   await page.getByRole('button',{name:'New notification',exact:true}).click();
+   await page.getByLabel('To',{exact:true}).selectOption(sender);await page.getByLabel('Subject',{exact:true}).fill('Required message');
+   submit=page.getByRole('button',{name:'Send notification',exact:true});
+  }else{
+   if(field==='withdrawal-reason')await page.getByRole('button',{name:'Sent',exact:false}).click();
+   await page.locator('.notification-row').click();
+   if(field==='withdrawal-reason'){await page.getByRole('button',{name:'Withdraw notification',exact:true}).click();submit=page.getByRole('button',{name:'Withdraw',exact:true});}
+   else submit=page.getByRole('button',{name:'Post comment',exact:true});
+  }
+  await editorTab(page,field,'Preview').click();await expect(page.locator(`#${field}-preview-panel`)).toContainText('Nothing to preview yet.');
+  await submit.click();await expect(editorTab(page,field,'Write')).toHaveAttribute('aria-selected','true');
+  await expect(page.locator(`#${field}`)).toBeVisible();await expect(page.locator(`#${field}`)).toBeFocused();
+  expect(mock.writes).toHaveLength(0);
+ });
+}
+
+test('Markdown tabs support keyboard navigation and retain editor height and selection on mobile',async({page})=>{
+ await page.setViewportSize({width:390,height:844});const mock=await setup(page,{conversation:true});await page.locator('.notification-row').click();
+ const text='Draft with a caret and\nmultiple lines\n**Markdown**';await page.locator('#comment-body').fill(text);
+ await page.locator('#comment-body').evaluate(el=>{el.style.height='220px';el.focus();el.setSelectionRange(3,9);});
+ const height=await page.locator('#comment-body-write-panel').evaluate(el=>el.getBoundingClientRect().height);
+ await editorTab(page,'comment-body','Write').focus();await page.keyboard.press('ArrowRight');
+ await expect(editorTab(page,'comment-body','Preview')).toBeFocused();await expect(editorTab(page,'comment-body','Preview')).toHaveAttribute('aria-selected','true');
+ const previewHeight=await page.locator('#comment-body-preview-panel').evaluate(el=>el.getBoundingClientRect().height);
+ expect(Math.abs(previewHeight-height)).toBeLessThanOrEqual(2);
+ await page.keyboard.press('Home');await expect(editorTab(page,'comment-body','Write')).toHaveAttribute('aria-selected','true');
+ await expect(page.locator('#comment-body')).toHaveValue(text);
+ expect(await page.locator('#comment-body').evaluate(el=>[el.selectionStart,el.selectionEnd])).toEqual([3,9]);
+ await editorTab(page,'comment-body','Write').focus();await page.keyboard.press('End');await expect(editorTab(page,'comment-body','Preview')).toHaveAttribute('aria-selected','true');
+ await page.keyboard.press('ArrowLeft');await expect(editorTab(page,'comment-body','Write')).toHaveAttribute('aria-selected','true');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(mock.writes).toHaveLength(0);
+});
+
+test('realtime preserves both Markdown drafts, Preview modes and expanded history',async({page})=>{
+ const mock=await setup(page,{conversation:true,commentCount:35});await page.locator('.notification-row').click();
+ await page.getByRole('button',{name:'Load earlier comments',exact:true}).click();await expect(page.locator('.conversation-comment')).toHaveCount(35);
+ await page.locator('#ack-note').fill('Private **ack draft**');await editorTab(page,'ack-note','Preview').click();
+ await page.locator('#comment-body').fill('Shared **comment draft**');await editorTab(page,'comment-body','Preview').click();
+ mock.incomingComment('A new incoming message');await page.evaluate(()=>window.inboxSignal());
+ await expect(page.locator('.conversation-comment')).toHaveCount(36,{timeout:10000});
+ for(const id of ['ack-note','comment-body'])await expect(editorTab(page,id,'Preview')).toHaveAttribute('aria-selected','true');
+ await expect(page.locator('#ack-note')).toHaveValue('Private **ack draft**');await expect(page.locator('#comment-body')).toHaveValue('Shared **comment draft**');
+ await editorTab(page,'comment-body','Write').click();await page.locator('#comment-body').focus();await page.locator('#comment-body').evaluate(el=>el.setSelectionRange(2,7));
+ mock.incomingComment('Another incoming message');await page.evaluate(()=>window.inboxSignal());
+ await expect(page.locator('.conversation-comment')).toHaveCount(37,{timeout:10000});await expect(page.locator('#comment-body')).toBeFocused();
+ expect(await page.locator('#comment-body').evaluate(el=>[el.selectionStart,el.selectionEnd])).toEqual([2,7]);expect(mock.writes).toHaveLength(0);
+});
+
+test('account replacement discards private editor drafts and Preview modes',async({page,context})=>{
+ await setup(page,{conversation:true});const peer=await context.newPage();await setup(peer,{restore:true,conversation:true});
+ await page.locator('.notification-row').click();await page.locator('#ack-note').fill('Private acknowledgement draft');await editorTab(page,'ack-note','Preview').click();
+ await page.locator('#comment-body').fill('Private unsent comment');await editorTab(page,'comment-body','Preview').click();
+ const token=Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({id:sender,exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
+ await peer.evaluate(({token,id})=>localStorage.setItem('notifycontext.auth',JSON.stringify({token,record:{id,name:'Other colleague',collectionName:'users'}})),{token,id:sender});
+ await expect(page.locator('#settings')).toContainText('Other colleague');await expect(page.locator('#detail')).not.toContainText('Private unsent comment');
+ await page.getByRole('button',{name:'Sent',exact:false}).click();await page.locator('.notification-row').click();
+ await expect(page.locator('#comment-body')).toHaveValue('');await expect(editorTab(page,'comment-body','Write')).toHaveAttribute('aria-selected','true');
+ await peer.evaluate(({token,id})=>localStorage.setItem('notifycontext.auth',JSON.stringify({token,record:{id,name:'Vamsi',collectionName:'users'}})),{token:jwt,id:user});
+ await expect(page.locator('#settings')).toContainText('Vamsi');await page.locator('[data-view=inbox]').click();await page.locator('.notification-row').click();
+ await expect(page.locator('#ack-note')).toHaveValue('');await expect(editorTab(page,'ack-note','Write')).toHaveAttribute('aria-selected','true');
+ await expect(page.locator('#comment-body')).toHaveValue('');
+});
+
+test('conversation split control supports independent keyboard actions and adapts after triage',async({page})=>{
+ const mock=await setup(page,{conversation:true});await page.locator('.notification-row').click();const actions=page.locator('.conversation-triage');
+ await expect(actions.getByRole('button',{name:'Read & archive',exact:true})).toHaveClass(/primary/);
+ const toggle=actions.getByRole('button',{name:'Other conversation actions',exact:true});await toggle.click();
+ await expect(actions.getByRole('button',{name:'Mark read',exact:true})).toBeFocused();await page.keyboard.press('ArrowDown');await expect(actions.getByRole('button',{name:'Archive',exact:true})).toBeFocused();
+ await page.keyboard.press('Escape');await expect(toggle).toHaveAttribute('aria-expanded','false');expect(mock.writes).toHaveLength(0);
+ await toggle.click();await actions.getByRole('button',{name:'Mark read',exact:true}).click();
+ await expect(actions.getByRole('button',{name:'Archive',exact:true})).toHaveClass(/primary/);await expect(toggle).toHaveCount(0);
+ expect(mock.writes.at(-1).body.action).toBe('read');expect(mock.recipients()[0].acknowledged_at).toBe('');
+ await actions.getByRole('button',{name:'Archive',exact:true}).click();await expect(actions.getByRole('button',{name:'Move to inbox',exact:true})).toHaveClass(/primary/);
+ await actions.getByRole('button',{name:'Move to inbox',exact:true}).click();await expect(actions.getByRole('button',{name:'Archive',exact:true})).toBeVisible();
+ mock.incomingComment();await page.evaluate(()=>window.inboxSignal());await expect(actions.getByRole('button',{name:'Read & archive',exact:true})).toBeVisible();
+ await actions.getByRole('button',{name:'Read & archive',exact:true}).click();await expect(actions.getByRole('button',{name:'Move to inbox',exact:true})).toBeVisible();
+ expect(mock.writes.map(w=>w.body.action)).toEqual(['read','archive','unarchive','read_archive']);expect(mock.recipients()[0].acknowledged_at).toBe('');
+});
+
+test('a delayed detail refresh preserves edits and the latest caret made while it was pending',async({page})=>{
+ const mock=await setup(page,{conversation:true});await page.locator('.notification-row').click();await page.locator('#comment-body').fill('Initial draft before refresh');
+ await page.locator('#comment-body').focus();await page.locator('#comment-body').evaluate(el=>el.setSelectionRange(1,3));
+ let release,started;const gate=new Promise(resolve=>{release=resolve;}),pending=new Promise(resolve=>{started=resolve;});
+ await page.route('**/api/context/query',async route=>{if(classify(route.request().postDataJSON().sql)==='detail'){started();await gate;}await route.fallback();});
+ mock.incomingComment();await page.evaluate(()=>window.inboxSignal());await pending;
+ await page.locator('#comment-body').fill('New draft edited during network wait');await page.locator('#comment-body').evaluate(el=>el.setSelectionRange(8,14));
+ release();await expect(page.locator('.conversation-comment')).toHaveCount(1,{timeout:10000});
+ await expect(page.locator('#comment-body')).toHaveValue('New draft edited during network wait');await expect(page.locator('#comment-body')).toBeFocused();
+ expect(await page.locator('#comment-body').evaluate(el=>[el.selectionStart,el.selectionEnd])).toEqual([8,14]);
+});
+
+test('a late compose response cannot close or overwrite a replacement dialog',async({page})=>{
+ await setup(page);let release,started;const gate=new Promise(resolve=>{release=resolve;}),pending=new Promise(resolve=>{started=resolve;});
+ await page.route('**/api/collections/notifications/records',async route=>{started();await gate;await route.fallback();});
+ await page.getByRole('button',{name:'New notification',exact:true}).click();await page.getByLabel('To',{exact:true}).selectOption(sender);
+ await page.getByLabel('Subject',{exact:true}).fill('First request');await page.locator('#body').fill('First private message');await editorTab(page,'body','Preview').click();
+ await page.getByRole('button',{name:'Send notification',exact:true}).click();await pending;
+ await page.locator('.dialog-close').click();await page.getByRole('button',{name:'New notification',exact:true}).click();
+ await page.getByLabel('Subject',{exact:true}).fill('Replacement draft');await page.locator('#body').fill('Keep this second draft');await editorTab(page,'body','Preview').click();
+ release();await page.waitForTimeout(300);
+ await expect(page.locator('#dialog')).toBeVisible();await expect(page.getByLabel('Subject',{exact:true})).toHaveValue('Replacement draft');
+ await expect(page.locator('#body')).toHaveValue('Keep this second draft');await expect(editorTab(page,'body','Preview')).toHaveAttribute('aria-selected','true');
+ await expect(page.locator('#form-error')).toBeEmpty();
+});
+
+
+test('Markdown Preview stays usable at desktop and mobile widths',async({page})=>{
+ await page.setViewportSize({width:1440,height:1000});await setup(page,{conversation:true});await page.locator('.notification-row').click();
+ await page.locator('#comment-body').fill('## Review notes\n\nThe **renewal** is ready.\n\n- Check the dates\n- Confirm the total\n\n[Supporting context](https://example.com)');await editorTab(page,'comment-body','Preview').click();
+ await page.locator('.conversation').scrollIntoViewIfNeeded();await mkdir('/tmp/notifycontext-editor-checks',{recursive:true});
+ await page.screenshot({path:'/tmp/notifycontext-editor-checks/desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.locator('.conversation').scrollIntoViewIfNeeded();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await expect(page.locator('#comment-body-preview-panel strong')).toHaveText('renewal');await page.screenshot({path:'/tmp/notifycontext-editor-checks/mobile.png',fullPage:true});
+});
+
+test('Write and Preview retain independent scroll positions without losing the draft',async({page})=>{
+ await setup(page,{conversation:true});await page.locator('.notification-row').click();
+ const text=Array.from({length:50},(_,i)=>`Paragraph ${i+1}: **review this item**.`).join('\n\n');await page.locator('#comment-body').fill(text);
+ await page.locator('#comment-body').evaluate(el=>{el.style.height='140px';el.scrollTop=180;});
+ const writeScroll=await page.locator('#comment-body').evaluate(el=>el.scrollTop);expect(writeScroll).toBeGreaterThan(0);
+ await editorTab(page,'comment-body','Preview').click();await page.locator('#comment-body-preview-panel').evaluate(el=>{el.scrollTop=220;});
+ const previewScroll=await page.locator('#comment-body-preview-panel').evaluate(el=>el.scrollTop);expect(previewScroll).toBeGreaterThan(0);
+ await editorTab(page,'comment-body','Write').click();expect(await page.locator('#comment-body').evaluate(el=>el.scrollTop)).toBe(writeScroll);
+ await editorTab(page,'comment-body','Preview').click();expect(await page.locator('#comment-body-preview-panel').evaluate(el=>el.scrollTop)).toBe(previewScroll);
+ await expect(page.locator('#comment-body')).toHaveValue(text);
 });

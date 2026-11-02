@@ -349,3 +349,24 @@ The standalone launcher was then pinned to published client source
 `9069a17a329269a585aa37d2b1109fbcec201ac0`. The copied-launcher skill suite passed
 against the exact server pin from an unrelated temporary directory, including
 conversation pagination, duplicate retries, schema checks and personal triage.
+
+## Consistent Markdown editors and conversation split actions — 2 November 2026
+
+The browser now uses one Write / Preview component for notification messages,
+shared comments, private acknowledgement notes and withdrawal reasons. Saved
+withdrawal reasons use the same sanitized renderer. Conversation triage uses the
+existing green split-button pattern, preserving explicit version-checked actions.
+No database schema, server pin or client package change is required.
+
+All 24 local backend/client regression suites passed against the unchanged clean
+`5f1b8f53e0af9d45cb0b396a2ecfb4e9932dca5a` server. The production frontend build
+and all three rebuilt actual-server browser workflows passed: baseline (including
+real 429 recovery), private feedback and shared conversations. New coverage checks
+Preview submission and exact Markdown payloads, empty required validation, sanitized
+withdrawal display, keyboard/mobile behavior, editor sizing, independent scroll,
+account isolation, delayed-dialog safety and explicit split actions. A delayed
+refresh regression verifies edits and cursor changes made while a read is pending;
+focus is captured immediately before DOM replacement. Desktop/mobile screenshots
+were inspected for layout and overflow. Workflow actionlint passed.
+
+The final clean browser fixture run passed all 59 tests in 2.2 minutes.

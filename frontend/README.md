@@ -70,8 +70,8 @@ identical text. No write is retried automatically.
 
 One personal inbox row combines notification delivery, private acknowledgement feedback and
 shared replies. Incoming comments return other participants' rows to Inbox as unread; the
-author's own state does not change. **Mark conversation read**, **Archive conversation** and
-**Read & archive conversation** are explicit, revision-checked actions. Acknowledgement
+author's own state does not change. **Mark read**, **Archive** and
+**Read & archive** are explicit, revision-checked actions. Acknowledgement
 remains a separate action, including **Acknowledge & archive**. Opening a conversation does
 not mark anything read. Sent-only notifications do not appear in Archived before incoming
 activity. Search includes authorized shared comments and private notes.
@@ -85,3 +85,22 @@ python3 frontend/tests/conversations.py --binary /absolute/path/to/pinned/pocket
 This checks repeated comments, sender replies, private historical notes, unchanged author
 state, archived resurfacing, realtime refresh, draft preservation, search, chronological
 pagination and mobile layout with synthetic accounts. Desktop alert APIs remain mocked.
+
+## Write and preview
+
+Notification messages, shared comments, private acknowledgement notes and withdrawal
+reasons use the same **Write** / **Preview** editor. Preview renders sanitized Markdown
+inside the editor at the writing area's height; an empty draft says “Nothing to preview
+yet.” The Write tab retains the textarea, selection, scroll position and manually resized
+height. The active tab and editor state survive notification refreshes, alongside the draft.
+Left/Right arrows and Home/End move between the tabs; only the selected tab is in the normal
+tab order. Submitting while previewing includes the textarea value. Required empty fields
+return to Write for normal browser validation. Cancelled dialogs and account changes clear
+editor state. Saved withdrawal reasons render with the same Markdown sanitizer.
+
+Conversation triage uses the same green split button as acknowledgement triage. An unread,
+unarchived conversation offers **Read & archive**, with **Mark read** and **Archive** in
+its dropdown. A read conversation offers **Archive**; an archived one offers **Move to inbox**
+(and **Mark read** when still unread). The dropdown supports keyboard navigation and Escape.
+These remain explicit canonical conversation-state actions; opening or previewing text never
+marks activity read or acknowledges a notification.

@@ -129,3 +129,11 @@ signals only its owner. Fetching, search, opening a link and realtime refresh ne
 read or acknowledge. Clients query comments through authenticated SQL, paginate by
 sequence, and include comments in authorized search. There are no nested replies,
 participant editing, attachments, comment edits or implicit acknowledgements.
+
+## Browser Markdown editors
+
+All four multiline inputs (notification body, shared comment, private acknowledgement
+note and withdrawal reason) expose Write / Preview tabs. Preview and saved display
+use the same sanitized Markdown renderer. This adds Markdown presentation for
+withdrawal reasons without changing their stored value, validation limit or API.
+Tab switches do not submit or perform read/acknowledgement actions.

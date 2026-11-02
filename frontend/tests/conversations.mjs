@@ -14,7 +14,7 @@ async function open(who,width=1440){
  await page.addInitScript(()=>{window.notificationCalls=[];window.Notification=class{static permission='granted';constructor(title,options){window.notificationCalls.push({title,...options});}close(){}};});
  await page.goto(base+'/#/notifications/'+id);await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill(who+'@example.com');await page.getByLabel('Password',{exact:true}).fill('SyntheticUserPassword123!');await page.getByRole('button',{name:'Sign in',exact:true}).click();await expect(page.locator('.detail-title')).toHaveText('Conversation browser review');return page;
 }
-async function post(page,body){await page.getByLabel('Add a comment').fill(body);await page.getByRole('button',{name:'Post comment',exact:true}).click();await expect(page.getByLabel('Add a comment')).toHaveValue('');}
+async function post(page,body){await page.locator('[data-editor-id=comment-body]').getByRole('tab',{name:'Write',exact:true}).click();await page.locator('#comment-body').fill(body);await page.locator('[data-editor-id=comment-body]').getByRole('tab',{name:'Preview',exact:true}).click();await page.getByRole('button',{name:'Post comment',exact:true}).click();await expect(page.locator('#comment-body')).toHaveValue('');}
 try{
  const alice=await open('alice'),carol=await open('carol',390);
  await expect(alice.locator('.recipient-status')).toContainText('Private acknowledgement from Bob');
@@ -25,11 +25,12 @@ try{
  await expect(alice.locator('.conversation-comment')).toHaveCount(2,{timeout:10000});
  await expect(carol.locator('.conversation-comment')).toHaveCount(2);
  assert.equal((await query('carol',`SELECT acknowledged_at FROM notification_recipients WHERE notification='${id}'`))[0].acknowledged_at,'');
- await carol.getByRole('button',{name:'Read & archive conversation',exact:true}).click();await expect(carol.locator('.notification-row')).toHaveCount(0);
- await carol.getByLabel('Add a comment').fill('A draft while someone else replies');
+ await carol.locator('.conversation-triage').getByRole('button',{name:'Read & archive',exact:true}).click();await expect(carol.locator('.notification-row')).toHaveCount(0);
+ await carol.locator('[data-editor-id=comment-body]').getByRole('tab',{name:'Write',exact:true}).click();await carol.locator('#comment-body').fill('A draft while someone else replies');await carol.locator('[data-editor-id=comment-body]').getByRole('tab',{name:'Preview',exact:true}).click();
  await post(alice,'Sender response: searchable discussion phrase');
  await expect(carol.locator('.notification-row')).toHaveCount(1,{timeout:10000});await expect(carol.locator('.notification-row')).toHaveClass(/unread/);
- await expect(carol.locator('.conversation-comment')).toHaveCount(3,{timeout:10000});await expect(carol.getByLabel('Add a comment')).toHaveValue('A draft while someone else replies');
+ await expect(carol.locator('.conversation-comment')).toHaveCount(3,{timeout:10000});await expect(carol.locator('#comment-body')).toHaveValue('A draft while someone else replies');
+ await expect(carol.locator('[data-editor-id=comment-body]').getByRole('tab',{name:'Preview',exact:true})).toHaveAttribute('aria-selected','true');
  assert.equal((await state('carol')).read_at,'');assert.equal((await state('carol')).archived_at,'');
  await expect.poll(()=>carol.evaluate(()=>window.notificationCalls.length)).toBe(1);
  await carol.evaluate(()=>window.dispatchEvent(new Event('online')));assert.equal(await carol.evaluate(()=>window.notificationCalls.length),1);
@@ -40,11 +41,11 @@ try{
  await carol.evaluate(()=>window.dispatchEvent(new Event('online')));await expect(carol.locator('.conversation-comment')).toHaveCount(30,{timeout:10000});
  await carol.getByRole('button',{name:'Load earlier comments',exact:true}).click();await expect(carol.locator('.conversation-comment')).toHaveCount(35);
  await expect(carol.locator('.conversation-comment').first()).toContainText('First shared comment');await expect(carol.locator('.conversation-comment').last()).toContainText('Pagination comment 31');
- await expect(carol.getByLabel('Add a comment')).toHaveValue('A draft while someone else replies');
- await carol.getByLabel('Add a comment').focus();await carol.getByLabel('Add a comment').evaluate(el=>el.setSelectionRange(2,7));
+ await expect(carol.locator('#comment-body')).toHaveValue('A draft while someone else replies');
+ await carol.locator('[data-editor-id=comment-body]').getByRole('tab',{name:'Write',exact:true}).click();await carol.locator('#comment-body').focus();await carol.locator('#comment-body').evaluate(el=>el.setSelectionRange(2,7));
  await api('bob','/api/collections/notification_comments/records',{notification:id,body_markdown:'After expanding history',submission_key:'after-expand'});
  await expect(carol.locator('.conversation-comment')).toHaveCount(36,{timeout:10000});
- await expect(carol.getByLabel('Add a comment')).toBeFocused();assert.deepEqual(await carol.getByLabel('Add a comment').evaluate(el=>[el.selectionStart,el.selectionEnd]),[2,7]);
+ await expect(carol.locator('#comment-body')).toBeFocused();assert.deepEqual(await carol.locator('#comment-body').evaluate(el=>[el.selectionStart,el.selectionEnd]),[2,7]);
  assert.equal(await carol.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  await mkdir('/tmp/notifycontext-conversation-checks',{recursive:true});
  await carol.screenshot({path:'/tmp/notifycontext-conversation-checks/mobile.png',fullPage:true});await alice.screenshot({path:'/tmp/notifycontext-conversation-checks/desktop.png',fullPage:true});

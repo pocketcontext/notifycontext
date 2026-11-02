@@ -1,8 +1,9 @@
 import {chromium,expect} from '@playwright/test';
 async function revealAction(page,name,feedback=false){
- const button=page.getByRole('button',{name,exact:true});
- const toggle=page.getByRole('button',{name:feedback?'Other feedback actions':'Other message actions',exact:true});
- await expect(page.locator('.actions button:disabled')).toHaveCount(0);
+ const conversation=name.includes('conversation'),label=conversation?name.replace(' conversation',''):name;
+ const button=(conversation?page.locator('.conversation-triage'):page).getByRole('button',{name:label,exact:true});
+ const toggle=page.getByRole('button',{name:name.includes('conversation')?'Other conversation actions':feedback?'Other feedback actions':'Other message actions',exact:true});
+ await expect(page.locator('.actions button:disabled, .conversation-triage button:disabled')).toHaveCount(0);
  await expect.poll(async()=>await button.isVisible() || await toggle.isVisible()).toBe(true);
  if(!await button.isVisible())await toggle.click();
  return button;
@@ -70,15 +71,15 @@ try {
  await expect(page.locator('.recipient-status')).toHaveCount(0);await expect(page.locator('.references a')).toHaveText(/Renewal terms/);
  mark=log.length;
  await chooseAction(page,'Mark conversation read');
- await page.getByRole('button',{name:'Mark conversation read',exact:true}).waitFor({state:'detached'});
+ await page.locator('.conversation-triage').getByRole('button',{name:'Mark read',exact:true}).waitFor({state:'detached'});
  // A separate open tab must receive the committed change before fallback polling.
  await expect(peer).toHaveTitle('NotifyContext',{timeout:5000});await peer.close();
  await page.waitForTimeout(3000);counts.action=log.length-mark;
- await page.getByLabel('Optional acknowledgement note').fill('Received; reviewing this afternoon.');
+ await page.locator('#ack-note').fill('Received; reviewing this afternoon.');await page.locator('[data-editor-id=ack-note]').getByRole('tab',{name:'Preview',exact:true}).click();
  await chooseAction(page,'Acknowledge');
  await page.locator('.acknowledgement').filter({hasText:'Received; reviewing this afternoon.'}).waitFor();
  await chooseAction(page,'Archive conversation');
- await page.getByRole('button',{name:'Move conversation to inbox',exact:true}).waitFor();
+ await page.locator('.conversation-triage').getByRole('button',{name:'Move to inbox',exact:true}).waitFor();
  await expect(page.locator('.notification-row').filter({hasText:'Supplier renewal ready'})).toHaveCount(0);
  await page.getByRole('button',{name:'Archived',exact:false}).click();
  await page.locator('.notification-row').filter({hasText:'Supplier renewal ready'}).waitFor();
@@ -95,7 +96,7 @@ try {
  await page.getByRole('button',{name:'New notification'}).click();
  await page.getByLabel('To',{exact:true}).selectOption(process.env.NOTIFYCONTEXT_TEST_ALICE);
  await page.getByLabel('Subject',{exact:true}).fill('Budget approval requested');
- await page.locator('#body').fill('## Budget\nPlease review **the totals**.');
+ await page.locator('#body').fill('## Budget\nPlease review **the totals**.');await page.locator('[data-editor-id=body]').getByRole('tab',{name:'Preview',exact:true}).click();
  await page.getByLabel('Request acknowledgement',{exact:true}).check();
  await page.getByRole('button',{name:'Send notification',exact:true}).click();
  await page.locator('#dialog').waitFor({state:'hidden'});

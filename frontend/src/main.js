@@ -1,6 +1,7 @@
 import {pb, signIn, refreshSession, sessionIdentity} from './auth.js';
 import {escapeHTML as e, sqlQuote as q, markdown, rows, statusLabel, kindLabel, effectiveStatus, alertDecision} from './core.js';
 import {updateTabIndicator} from './tab-indicator.js';
+import {editorMarkup,bindEditor,captureEditors} from './markdown-editor.js';
 import './style.css';
 
 const state = {view:'inbox', filter:'all', search:'', page:0, list:[], directory:[], statuses:[], directoryAt:0, preferences:null, latest:null, lastPoll:0, connected:false, selected:null};
@@ -378,7 +379,17 @@ function actionControl(record,notification,feedback=false,ackOnly=false){
   const primary=!record.archived_at && individual.some(([action])=>action==='acknowledge')?['acknowledge_archive','Acknowledge & archive']:
     !record.archived_at && !record.read_at?['read_archive',feedback?'Read & archive comments':'Read & archive']:individual[0];
   const choices=individual.filter(([action])=>action!==primary[0]),hint=primary[0]==='acknowledge_archive'?'Saves your note, acknowledges, marks read and archives.':primary[0]==='read_archive'?(feedback?'Marks current comments read and archives them.':'Marks this message read and archives it.'):'';
+  return splitControl(prefix,attribute,primary,choices,hint);
+}
+function splitControl(prefix,attribute,primary,choices,hint=''){
   return `<div class="action-split"><button class="primary" ${attribute}="${primary[0]}" ${hint?`aria-describedby="${prefix}-action-hint"`:''}>${primary[1]}</button>${choices.length?`<button type="button" class="primary action-toggle" popovertarget="${prefix}-action-options" aria-expanded="false" aria-label="Other ${prefix} actions">▾</button><div id="${prefix}-action-options" class="action-options" popover="auto" role="group" aria-label="Individual ${prefix} actions">${choices.map(([action,label])=>`<button type="button" ${attribute}="${action}">${label}</button>`).join('')}</div>`:''}</div>${hint?`<p class="fine" id="${prefix}-action-hint">${hint}</p>`:''}`;
+}
+function conversationControl(record){
+  const individual=[];
+  if(!record.read_at)individual.push(['read','Mark read']);
+  individual.push([record.archived_at?'unarchive':'archive',record.archived_at?'Move to inbox':'Archive']);
+  const primary=!record.read_at && !record.archived_at?['read_archive','Read & archive']:individual[0];
+  return splitControl('conversation','data-conversation-action',primary,individual.filter(([action])=>action!==primary[0]),primary[0]==='read_archive'?'Marks current conversation activity read and archives it.':'');
 }
 function bindActionMenus(){
   all('.action-toggle').forEach(toggle=>{
@@ -408,7 +419,7 @@ function commentMarkup(comment){
 }
 function conversationSection(notification,conversation,comments,hasEarlier){
   const draft=commentDrafts.get(notification.id);
-  return `<section class="conversation" aria-labelledby="conversation-heading"><h3 id="conversation-heading">Conversation</h3><p class="fine">Shared with the sender and all recipients, including recipients who claim this notification later. Comments are permanent and do not acknowledge the notification.</p><button type="button" class="text-button" id="more-comments" ${!hasEarlier?'hidden':''}>Load earlier comments</button><div id="conversation-comments">${comments.slice().reverse().map(commentMarkup).join('') || '<p class="muted conversation-empty">No shared comments yet.</p>'}</div>${conversation?.activity_version>0?`<div class="conversation-triage">${!conversation.read_at?'<button type="button" class="secondary" data-conversation-action="read">Mark conversation read</button>':''}<button type="button" class="secondary" data-conversation-action="${conversation.archived_at?'unarchive':'archive'}">${conversation.archived_at?'Move conversation to inbox':'Archive conversation'}</button>${!conversation.read_at && !conversation.archived_at?'<button type="button" class="secondary" data-conversation-action="read_archive">Read & archive conversation</button>':''}</div>`:''}${notification.withdrawn_at?'<p class="fine">This notification was withdrawn. The conversation is retained and closed to new comments.</p>':`<form id="comment-form"><label for="comment-body">Add a comment <span class="optional">Markdown supported</span></label><textarea id="comment-body" maxlength="4000" rows="3" required ${draft?.posting?'disabled':''}>${e(draft?.text||'')}</textarea><details><summary>Preview comment</summary><div class="markdown" id="comment-preview">${markdown(draft?.text||'')}</div></details><p class="form-error" id="comment-error" role="alert"></p><button class="primary" type="submit" ${draft?.posting?'disabled':''}>Post comment</button></form>`}</section>`;
+  return `<section class="conversation" aria-labelledby="conversation-heading"><h3 id="conversation-heading">Conversation</h3><p class="fine">Shared with the sender and all recipients, including recipients who claim this notification later. Comments are permanent and do not acknowledge the notification.</p><button type="button" class="text-button" id="more-comments" ${!hasEarlier?'hidden':''}>Load earlier comments</button><div id="conversation-comments">${comments.slice().reverse().map(commentMarkup).join('') || '<p class="muted conversation-empty">No shared comments yet.</p>'}</div>${conversation?.activity_version>0?`<div class="conversation-triage">${conversationControl(conversation)}</div>`:''}${notification.withdrawn_at?'<p class="fine">This notification was withdrawn. The conversation is retained and closed to new comments.</p>':`<form id="comment-form">${editorMarkup({id:'comment-body',label:'Add a comment',value:draft?.text||'',required:true,disabled:draft?.posting,previewId:'comment-preview'})}<p class="form-error" id="comment-error" role="alert"></p><button class="primary" type="submit" ${draft?.posting?'disabled':''}>Post comment</button></form>`}</section>`;
 }
 function bindConversation(notification,conversation,comments,epoch,generation){
   const id=notification.id,current=()=>epoch===sessionEpoch && generation===detailGeneration && state.selected===id;
@@ -437,7 +448,7 @@ function bindConversation(notification,conversation,comments,epoch,generation){
   });
   const form=$('#comment-form');if(!form)return;
   const draft=commentDrafts.get(id)||{text:'',key:'',submitted:'',posting:false};commentDrafts.set(id,draft);
-  $('#comment-body').oninput=event=>{draft.text=event.target.value;$('#comment-preview').innerHTML=markdown(draft.text);};
+  bindEditor('comment-body',draft.commentEditor??={},text=>{draft.text=text;});
   form.onsubmit=async event=>{
     event.preventDefault();if(draft.posting)return;
     const body=draft.text;if(!body.trim()){$('#comment-error').textContent='Write a comment before posting.';return;}
@@ -455,11 +466,11 @@ function bindConversation(notification,conversation,comments,epoch,generation){
   };
 }
 async function openDetail(id, preserve=false) {
+  captureEditors($('#detail'));
   const epoch=sessionEpoch,generation=++detailGeneration;
-  const previousScroll=preserve?$('#detail')?.scrollTop||0:0;
-  const focused=preserve && ['comment-body','ack-note'].includes(document.activeElement?.id)?{id:document.activeElement.id,start:document.activeElement.selectionStart,end:document.activeElement.selectionEnd}:null;
+  let previousScroll=preserve?$('#detail')?.scrollTop||0:0;
   state.selected=id;saveRoute();
-  const panel=$('#detail');panel.scrollTop=0;panel.classList.add('open');panel.dataset.id='';if(!preserve)panel.innerHTML='<p class="loading">Loading notification…</p>';
+  const panel=$('#detail');if(!preserve)panel.scrollTop=0;panel.classList.add('open');panel.dataset.id='';if(!preserve)panel.innerHTML='<p class="loading">Loading notification…</p>';
   try {
     const detail=await loadDetail(id,preserve);
     if(epoch!==sessionEpoch || generation!==detailGeneration || state.selected!==id)return;
@@ -472,9 +483,14 @@ async function openDetail(id, preserve=false) {
     const conversation=notification.conversation?JSON.parse(notification.conversation):null;
     if(detailRetry?.id===id)detailRetry=null;
     const mine=recipients.find(r=>r.recipient===pb.authStore.record.id),sender=notification.sender===pb.authStore.record.id;
-    panel.innerHTML=`<button class="text-button mobile-back" id="back">← Back to inbox</button><div class="detail-meta"><span class="badge ${e(notification.kind)}">${e(kindLabel(notification.kind))}</span><time>${e(date(notification.created))}</time></div><button class="text-button" id="copy-record">Copy record link</button><h2 class="detail-title">${e(notification.subject)}</h2><div class="author"><span class="avatar">${e(name(notification.sender).slice(0,1))}</span><div><strong>${e(name(notification.sender))}</strong><small>${e(statusDescription(notification.sender))}</small></div></div>${notification.withdrawn_at?`<div class="notice error">Withdrawn: ${e(notification.withdrawal_reason)}</div>`:''}${notification.due_at?`<p class="deadline">Response requested by ${e(date(notification.due_at))}</p>`:''}<article class="markdown">${markdown(notification.body_markdown)}</article>${references.length?`<section class="references"><h3>Related context</h3>${references.map(ref=>`<a href="${e(/^https?:\/\//i.test(ref.url)?ref.url:'#')}" target="_blank" rel="noopener noreferrer">${e(ref.label || ref.url)} <span aria-hidden="true">↗</span></a>`).join('')}</section>`:''}${mine?`<section class="actions"><p class="muted">${mine.acknowledged_at?`Acknowledged ${e(date(mine.acknowledged_at))}`:notification.ack_required?'Your acknowledgement is requested.':'Acknowledge to let the sender know you received this.'}</p>${mine.acknowledgement_markdown?`<div class="markdown acknowledgement">${markdown(mine.acknowledgement_markdown)}</div>`:''}${!mine.acknowledged_at && !notification.withdrawn_at?'<label>Optional acknowledgement note (private to sender)<textarea id="ack-note" maxlength="4000" rows="2" placeholder="Received. I’ll review this tomorrow."></textarea></label>':''}${actionControl(mine,notification,false,!!conversation)}<p class="fine">Acknowledgement confirms receipt, not completion of the work.</p></section>`:''}${feedback?`<section class="actions feedback-actions"><h3>Private acknowledgement notes</h3><p>${feedback.read_at?'Comments marked read':'New comment'} · ${e(date(feedback.latest_at))}</p><div class="markdown">${markdown(recipients.find(r=>r.id===feedback.latest_recipient)?.acknowledgement_markdown || '')}</div>${conversation?'':actionControl(feedback,notification,true)}</section>`:''}${conversationSection(notification,conversation,detail.comments,hasEarlier)}${sender?`<section class="recipient-status"><h3>Recipient status</h3>${recipients.map(r=>recipientSummary(r,notification)).join('')}${!notification.withdrawn_at?'<button class="text-button danger" id="withdraw">Withdraw notification</button>':''}</section>`:''}`;
+    captureEditors(panel);if(preserve)previousScroll=panel.scrollTop;
+    // Snapshot the current editor focus only after the read finishes. DOM removal
+    // can dispatch blur before detachment, so keep this outside shared draft state.
+    const active=document.activeElement;
+    const editorFocus=preserve && panel.contains(active) && active.closest('.markdown-editor')?{id:active.id,start:active.selectionStart,end:active.selectionEnd,direction:active.selectionDirection,scrollTop:active.scrollTop}:null;
+    panel.innerHTML=`<button class="text-button mobile-back" id="back">← Back to inbox</button><div class="detail-meta"><span class="badge ${e(notification.kind)}">${e(kindLabel(notification.kind))}</span><time>${e(date(notification.created))}</time></div><button class="text-button" id="copy-record">Copy record link</button><h2 class="detail-title">${e(notification.subject)}</h2><div class="author"><span class="avatar">${e(name(notification.sender).slice(0,1))}</span><div><strong>${e(name(notification.sender))}</strong><small>${e(statusDescription(notification.sender))}</small></div></div>${notification.withdrawn_at?`<section class="notice error withdrawal"><strong>Withdrawn</strong><div class="markdown">${markdown(notification.withdrawal_reason)}</div></section>`:''}${notification.due_at?`<p class="deadline">Response requested by ${e(date(notification.due_at))}</p>`:''}<article class="markdown">${markdown(notification.body_markdown)}</article>${references.length?`<section class="references"><h3>Related context</h3>${references.map(ref=>`<a href="${e(/^https?:\/\//i.test(ref.url)?ref.url:'#')}" target="_blank" rel="noopener noreferrer">${e(ref.label || ref.url)} <span aria-hidden="true">↗</span></a>`).join('')}</section>`:''}${mine?`<section class="actions"><p class="muted">${mine.acknowledged_at?`Acknowledged ${e(date(mine.acknowledged_at))}`:notification.ack_required?'Your acknowledgement is requested.':'Acknowledge to let the sender know you received this.'}</p>${mine.acknowledgement_markdown?`<div class="markdown acknowledgement">${markdown(mine.acknowledgement_markdown)}</div>`:''}${!mine.acknowledged_at && !notification.withdrawn_at?editorMarkup({id:'ack-note',label:'Optional acknowledgement note (private to sender)',value:commentDrafts.get(id)?.ack||'',rows:2,placeholder:'Received. I’ll review this tomorrow.'}):''}${actionControl(mine,notification,false,!!conversation)}<p class="fine">Acknowledgement confirms receipt, not completion of the work.</p></section>`:''}${feedback?`<section class="actions feedback-actions"><h3>Private acknowledgement notes</h3><p>${feedback.read_at?'Comments marked read':'New comment'} · ${e(date(feedback.latest_at))}</p><div class="markdown">${markdown(recipients.find(r=>r.id===feedback.latest_recipient)?.acknowledgement_markdown || '')}</div>${conversation?'':actionControl(feedback,notification,true)}</section>`:''}${conversationSection(notification,conversation,detail.comments,hasEarlier)}${sender?`<section class="recipient-status"><h3>Recipient status</h3>${recipients.map(r=>recipientSummary(r,notification)).join('')}${!notification.withdrawn_at?'<button class="text-button danger" id="withdraw">Withdraw notification</button>':''}</section>`:''}`;
     const draft=commentDrafts.get(id)||{text:'',key:'',submitted:'',posting:false};commentDrafts.set(id,draft);
-    if($('#ack-note')){$('#ack-note').value=draft.ack||'';$('#ack-note').oninput=event=>{draft.ack=event.target.value;};}
+    if($('#ack-note'))bindEditor('ack-note',draft.ackEditor??={},text=>{draft.ack=text;});
     bindConversation(notification,conversation,detail.comments,epoch,generation);
     bindActionMenus();
     $('#copy-record').onclick=()=>void navigator.clipboard.writeText(new URL(routeHref(id,true),location.href).href).then(()=>report('Link copied.')).catch(()=>report('Unable to copy link.',true));
@@ -491,7 +507,7 @@ async function openDetail(id, preserve=false) {
         const refreshed=requestRefresh({urgent:true});
         if(state.selected===id){await openDetail(id);if(!['acknowledge','acknowledge_archive'].includes(action) && state.selected===id && $('#ack-note'))$('#ack-note').value=note;}
         await refreshed;
-      }catch(error){report(friendly(error),true);controls.forEach(control=>{control.disabled=false;});}
+      }catch(error){if(epoch!==sessionEpoch)return;report(friendly(error),true);controls.forEach(control=>{control.disabled=false;});}
     });
     all('[data-feedback-action]').forEach(button=>button.onclick=async()=>{
       all('.feedback-actions button').forEach(b=>{b.disabled=true;});
@@ -507,28 +523,41 @@ async function openDetail(id, preserve=false) {
     });
     if($('#withdraw'))$('#withdraw').onclick=()=>withdraw(notification);
     all('.notification-row').forEach(button=>button.classList.toggle('selected',button.dataset.id===id));
-    panel.dataset.id=id;panel.dataset.version=conversation?`${conversation.revision}:${notification.revision}:${notification.comment_total||0}`:'';if(preserve)panel.scrollTop=previousScroll;if(focused){const control=document.getElementById(focused.id);if(control && !control.disabled){control.focus({preventScroll:true});control.setSelectionRange(focused.start,focused.end);}}
+    panel.dataset.id=id;panel.dataset.version=conversation?`${conversation.revision}:${notification.revision}:${notification.comment_total||0}`:'';if(preserve)panel.scrollTop=previousScroll;
+    if(editorFocus){const control=document.getElementById(editorFocus.id);if(control && !control.disabled && !control.closest('[hidden]')){control.focus({preventScroll:true});if(typeof control.setSelectionRange==='function')control.setSelectionRange(editorFocus.start,editorFocus.end,editorFocus.direction);control.scrollTop=editorFocus.scrollTop;}}
   }catch(error){if(epoch!==sessionEpoch || generation!==detailGeneration || state.selected!==id)return;if(!error.final && (error.busy || !error.status || error.status>=500 || error.status===408))detailRetry={epoch,id};panel.innerHTML=`<button class="text-button" id="error-back">← Back to inbox</button><div class="empty"><p>${e(friendly(error))}</p></div>`;$('#error-back').onclick=()=>{panel.classList.remove('open');state.selected=null;saveRoute();};}
 }
 function dialog(content,setup) {
   const modal=$('#dialog');modal.innerHTML=`<button class="dialog-close icon-button" aria-label="Close dialog">×</button>${content}`;$('.dialog-close').onclick=()=>modal.close();modal.showModal();setup?.(modal);
 }
 function compose() {
-  const key=crypto.randomUUID();
-  dialog(`<p class="eyebrow">SHARE WHAT MATTERS</p><h2>New notification</h2><form id="compose-form"><label>To<select name="recipients" aria-label="To" multiple size="4">${state.directory.map(user=>`<option value="${e(user.id)}">${e(user.name || 'Colleague')} · ${e(statusDescription(user.id))}</option>`).join('')}</select><small>Choose colleagues here, enter emails below, or combine both. Use Ctrl / ⌘ for multiple selections.</small></label><label>Recipient emails<input name="recipient_emails" aria-label="Recipient emails" type="email" multiple maxlength="26000" placeholder="colleague@example.com, teammate@example.com"><small>Separate email addresses with commas.</small></label><p class="fine">Existing accounts receive the notification immediately. New colleagues can claim it by signing in within 30 days. <strong>No invitation email is sent.</strong></p><label>Subject<input name="subject" maxlength="200" required placeholder="What should they know?"></label><div class="form-grid"><label>Type<select name="kind"><option value="fyi">FYI</option><option value="review_requested">Review requested</option><option value="action_required">Action required</option></select></label><label>Response deadline <span class="optional">optional</span><input type="datetime-local" name="due_at"></label></div><label>Message <span class="optional">Markdown supported</span><textarea name="body_markdown" id="body" maxlength="20000" rows="7" required placeholder="Add the context and a clear next step…"></textarea></label><details><summary>Preview Markdown</summary><div id="preview" class="markdown"></div></details><div class="form-grid"><label>Reference label <span class="optional">optional</span><input name="reference_label" maxlength="200" placeholder="Supporting document"></label><label>Reference URL <span class="optional">optional</span><input name="reference_url" type="url" placeholder="https://…"></label></div><label class="checkbox"><input type="checkbox" name="ack_required"> Request acknowledgement</label><p class="fine">Recipients’ status does not block delivery. Deadlines do not schedule reminders.</p><p id="form-error" class="form-error" role="alert"></p><button class="primary" type="submit">Send notification</button></form>`,()=>{
-    $('#body').oninput=()=>{$('#preview').innerHTML=markdown($('#body').value);};
+  const key=crypto.randomUUID(),epoch=sessionEpoch,editorState={};
+  dialog(`<p class="eyebrow">SHARE WHAT MATTERS</p><h2>New notification</h2><form id="compose-form"><label>To<select name="recipients" aria-label="To" multiple size="4">${state.directory.map(user=>`<option value="${e(user.id)}">${e(user.name || 'Colleague')} · ${e(statusDescription(user.id))}</option>`).join('')}</select><small>Choose colleagues here, enter emails below, or combine both. Use Ctrl / ⌘ for multiple selections.</small></label><label>Recipient emails<input name="recipient_emails" aria-label="Recipient emails" type="email" multiple maxlength="26000" placeholder="colleague@example.com, teammate@example.com"><small>Separate email addresses with commas.</small></label><p class="fine">Existing accounts receive the notification immediately. New colleagues can claim it by signing in within 30 days. <strong>No invitation email is sent.</strong></p><label>Subject<input name="subject" maxlength="200" required placeholder="What should they know?"></label><div class="form-grid"><label>Type<select name="kind"><option value="fyi">FYI</option><option value="review_requested">Review requested</option><option value="action_required">Action required</option></select></label><label>Response deadline <span class="optional">optional</span><input type="datetime-local" name="due_at"></label></div>${editorMarkup({id:'body',label:'Message',name:'body_markdown',maxlength:20000,rows:7,required:true,placeholder:'Add the context and a clear next step…',previewId:'preview'})}<div class="form-grid"><label>Reference label <span class="optional">optional</span><input name="reference_label" maxlength="200" placeholder="Supporting document"></label><label>Reference URL <span class="optional">optional</span><input name="reference_url" type="url" placeholder="https://…"></label></div><label class="checkbox"><input type="checkbox" name="ack_required"> Request acknowledgement</label><p class="fine">Recipients’ status does not block delivery. Deadlines do not schedule reminders.</p><p id="form-error" class="form-error" role="alert"></p><button class="primary" type="submit">Send notification</button></form>`,()=>{
+    bindEditor('body',editorState);
     $('#compose-form').onsubmit=async event=>{event.preventDefault();const form=event.target,data=new FormData(form),button=form.querySelector('[type=submit]');button.disabled=true;try {
       const url=data.get('reference_url');if(url && !/^https?:\/\//i.test(url))throw new Error('Reference URLs must begin with https:// or http://.');
       const recipients=data.getAll('recipients'),recipientEmails=[...new Set(String(data.get('recipient_emails') || '').split(',').map(value=>value.trim().toLowerCase()).filter(Boolean))];
       if(!recipients.length && !recipientEmails.length)throw new Error('Choose a colleague or enter at least one recipient email.');
       if(recipients.length+recipientEmails.length>100)throw new Error('A notification can address at most 100 recipients.');
       const payload={subject:data.get('subject'),body_markdown:data.get('body_markdown'),kind:data.get('kind'),ack_required:data.has('ack_required'),due_at:data.get('due_at')?new Date(data.get('due_at')).toISOString():'',submission_key:key,recipients,recipient_emails:recipientEmails,references:url?[{kind:'url',label:data.get('reference_label')||url,url,source_system:'',external_id:''}]:[]};
-      const created=await pb.collection('notifications').create(payload);$('#dialog').close();report('Notification saved. No invitation email was sent. Open recipient status to check delivery and acknowledgement.');await loadList();await openDetail(created.id);
-    }catch(error){if($('#form-error'))$('#form-error').textContent=friendly(error);else report(friendly(error),true);}finally{button.disabled=false;}};
+      const created=await pb.collection('notifications').create(payload);if(epoch!==sessionEpoch || !form.isConnected || !$('#dialog').open)return;$('#dialog').close();report('Notification saved. No invitation email was sent. Open recipient status to check delivery and acknowledgement.');await loadList();if(epoch===sessionEpoch)await openDetail(created.id);
+    }catch(error){if(epoch!==sessionEpoch || !form.isConnected || !$('#dialog').open)return;form.querySelector('#form-error').textContent=friendly(error);}finally{if(epoch===sessionEpoch && form.isConnected)button.disabled=false;}};
   });
 }
 function withdraw(notification) {
-  dialog(`<h2>Withdraw notification</h2><p>The original message remains visible with your withdrawal reason.</p><form id="withdraw-form"><label>Reason<textarea name="reason" maxlength="2000" required rows="3"></textarea></label><p id="form-error" class="form-error" role="alert"></p><button class="primary" type="submit">Withdraw</button></form>`,()=>{$('#withdraw-form').onsubmit=async event=>{event.preventDefault();try{await pb.collection('notifications').update(notification.id,{action:'withdraw',expected_revision:notification.revision,withdrawal_reason:new FormData(event.target).get('reason')});$('#dialog').close();await openDetail(notification.id);await loadList();}catch(error){if($('#form-error'))$('#form-error').textContent=friendly(error);else report(friendly(error),true);}};});
+  const epoch=sessionEpoch,editorState={};
+  dialog(`<h2>Withdraw notification</h2><p>The original message remains visible with your withdrawal reason.</p><form id="withdraw-form">${editorMarkup({id:'withdrawal-reason',label:'Reason',name:'reason',maxlength:2000,required:true})}<p id="form-error" class="form-error" role="alert"></p><button class="primary" type="submit">Withdraw</button></form>`,()=>{
+    bindEditor('withdrawal-reason',editorState);
+    $('#withdraw-form').onsubmit=async event=>{
+      event.preventDefault();const form=event.target,button=form.querySelector('[type=submit]');button.disabled=true;
+      try{
+        await pb.collection('notifications').update(notification.id,{action:'withdraw',expected_revision:notification.revision,withdrawal_reason:new FormData(form).get('reason')});
+        if(epoch!==sessionEpoch || !form.isConnected || !$('#dialog').open)return;
+        $('#dialog').close();await openDetail(notification.id);if(epoch===sessionEpoch)await loadList();
+      }catch(error){if(epoch===sessionEpoch && form.isConnected && $('#dialog').open)form.querySelector('#form-error').textContent=friendly(error);}
+      finally{if(epoch===sessionEpoch && form.isConnected)button.disabled=false;}
+    };
+  });
 }
 function settings() {
   const current=statusFor(pb.authStore.record.id),availability=effectiveStatus(current);

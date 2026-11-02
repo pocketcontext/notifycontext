@@ -1,8 +1,9 @@
 import {chromium,expect} from '@playwright/test';
 async function revealAction(page,name,feedback=false){
- const button=page.getByRole('button',{name,exact:true});
- const toggle=page.getByRole('button',{name:feedback?'Other feedback actions':'Other message actions',exact:true});
- await expect(page.locator('.actions button:disabled')).toHaveCount(0);
+ const conversation=name.includes('conversation'),label=conversation?name.replace(' conversation',''):name;
+ const button=(conversation?page.locator('.conversation-triage'):page).getByRole('button',{name:label,exact:true});
+ const toggle=page.getByRole('button',{name:name.includes('conversation')?'Other conversation actions':feedback?'Other feedback actions':'Other message actions',exact:true});
+ await expect(page.locator('.actions button:disabled, .conversation-triage button:disabled')).toHaveCount(0);
  await expect.poll(async()=>await button.isVisible() || await toggle.isVisible()).toBe(true);
  if(!await button.isVisible())await toggle.click();
  return button;

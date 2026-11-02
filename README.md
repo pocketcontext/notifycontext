@@ -387,3 +387,16 @@ initial sequence without changing state. Personal triage uses
 `update notification_conversation_state ID` with `expected_revision` and
 `action` (`read`, `archive`, `unarchive` or `read_archive`). See the skill workflows
 for complete examples.
+
+## Markdown editing
+
+Notification messages, shared comments, private acknowledgement notes and withdrawal
+reasons use one Write / Preview editor. Preview renders the same sanitized Markdown
+as the saved content, including withdrawal reasons. An empty draft shows
+“Nothing to preview yet”. Switching tabs preserves the draft and does not submit,
+mark read or acknowledge anything. The submit action remains available from either
+tab; validation returns to Write when a required value is missing.
+
+Conversation triage uses the existing split-button pattern: Read & archive is the
+primary action for unread inbox conversations, with Mark read and Archive available
+in the dropdown. Available actions adapt to read and archived state.
