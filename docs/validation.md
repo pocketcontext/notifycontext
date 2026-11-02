@@ -344,3 +344,8 @@ test passed separately. New browser coverage includes shared visibility, multipl
 replies, archived resurfacing, draft and focus/caret retention, expanded history,
 withdrawal refresh, search and mobile layout. Desktop and mobile screenshots were
 inspected; native OS alerts remain mocked.
+
+The standalone launcher was then pinned to published client source
+`9069a17a329269a585aa37d2b1109fbcec201ac0`. The copied-launcher skill suite passed
+against the exact server pin from an unrelated temporary directory, including
+conversation pagination, duplicate retries, schema checks and personal triage.
