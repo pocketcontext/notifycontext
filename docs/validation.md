@@ -316,3 +316,31 @@ passed. Server coverage includes atomic read/acknowledge/archive, stale revision
 authorization, later-comment resurfacing and rollback on audit-event failure.
 Verified the split button and expanded individual-action menu in the local browser.
 The restarted preview uses synthetic records; production remains unchanged.
+
+## Shared notification conversations — 2 November 2026
+
+Migration 1790300700 adds immutable shared comments and owner-only conversation
+inbox state. Historical acknowledgement notes remain private. Synthetic tests cover
+repeated sender/recipient comments, duplicate and simultaneous submissions, ordered
+pagination, author attribution, private-state isolation, explicit triage, stale
+legacy and canonical revisions, pending-email history claims, withdrawal, and
+atomic rollback when comment or triage audit creation fails. The populated native
+backup and container smoke/recovery fixtures now include comments and state.
+
+Validation uses the unchanged clean server pin
+`5f1b8f53e0af9d45cb0b396a2ecfb4e9932dca5a`, built with Go 1.27.2, CGO and the
+Makefile's SQLite tags (`vcs.modified=false`). Application regression suites,
+conversation tests, client tests and copied source-client skill checks passed.
+Workflow validation with actionlint and the package source/wheel build passed.
+Release CI still gates publication on native AMD64/ARM64 application, container
+configuration, smoke and populated recovery checks.
+
+The frontend production build, actual-server baseline and historical-feedback
+workflows, and new conversation browser workflow passed. The browser regression
+run passed 45 of 46 tests initially; its remaining test asserted identical SQL
+across selected records. It was updated to compare the unchanged alert subquery
+because detail-version refresh now includes the selected record. The corrected
+test passed separately. New browser coverage includes shared visibility, multiple
+replies, archived resurfacing, draft and focus/caret retention, expanded history,
+withdrawal refresh, search and mobile layout. Desktop and mobile screenshots were
+inspected; native OS alerts remain mocked.

@@ -14,6 +14,71 @@ from notifycontext_client import cli as nc
 
 
 class ClientTest(unittest.TestCase):
+    def test_conversation_pages_to_initial_sequence_without_mutation(self):
+        responses = [([{'id': 'notification001', 'through_sequence': 3}], False),
+                     ([{'sequence': 1}, {'sequence': 2}], False), ([{'sequence': 3}], False)]
+        with patch.object(nc, 'query_rows', side_effect=responses) as query, patch.object(nc, 'call') as mutation:
+            result = nc.conversation({}, 'notification001', 2)
+        self.assertEqual(result['count'], 3)
+        self.assertEqual(result['through_sequence'], 3)
+        self.assertIn('c.sequence>2 AND c.sequence<=3', query.call_args.args[1])
+        mutation.assert_not_called()
+
+    def test_conversation_shrinks_truncated_page_without_skipping_comments(self):
+        responses = [([{'through_sequence': 2}], False), ([{'sequence': 1}], True),
+                     ([{'sequence': 1}], False), ([{'sequence': 2}], False)]
+        with patch.object(nc, 'query_rows', side_effect=responses) as query:
+            result = nc.conversation({}, 'notification001', 2)
+        self.assertEqual(result['count'], 2)
+        self.assertIn('c.sequence>0', query.call_args_list[2].args[1])
+        self.assertIn('LIMIT 1', query.call_args_list[2].args[1])
+
+    def test_conversation_empty_is_distinct_from_unavailable_and_incomplete(self):
+        with patch.object(nc, 'query_rows', return_value=([{'through_sequence': 0}], False)):
+            self.assertEqual(nc.conversation({}, 'notification001', 2)['count'], 0)
+        for responses in [[([], False)], [([{'through_sequence': 1}], False), ([], False)],
+                          [([{'through_sequence': 2}], False), ([{'sequence': 2}], False)],
+                          [([{'through_sequence': 1}], False), ([], True)]]:
+            with patch.object(nc, 'query_rows', side_effect=responses), self.assertRaises(nc.Fail):
+                nc.conversation({}, 'notification001', 1)
+
+    def test_conversation_validation_precedes_network(self):
+        for identifier, size in [('bad', 2), ('notification001', 0), ('notification001', 101)]:
+            with patch.object(nc, 'query_rows') as query, self.assertRaises(nc.Fail):
+                nc.conversation({}, identifier, size)
+            query.assert_not_called()
+
+    def test_comment_requires_recoverable_payload_and_reuses_it(self):
+        payload = {'body_markdown': 'Can we review this?', 'submission_key': 'stable-comment-key'}
+        with patch.object(nc, 'config', return_value={}), patch.object(nc, 'must', return_value={'id': 'comment00000001'}) as must, patch.object(nc, 'say'):
+            for _ in range(2): nc.run(nc.parse(['comment', 'notification001', json.dumps(payload)]))
+        self.assertEqual(must.call_count, 2)
+        self.assertEqual(must.call_args.args[3], {'notification': 'notification001', **payload})
+        for invalid in [{'body_markdown': 'No key'}, {'body_markdown': ' ', 'submission_key': 'key'},
+                        {'body_markdown': 'x' * 4001, 'submission_key': 'key'}, {**payload, 'author': 'someone'}]:
+            with patch.object(nc, 'config', return_value={}), patch.object(nc, 'must') as must, self.assertRaises(nc.Fail):
+                nc.run(nc.parse(['comment', 'notification001', json.dumps(invalid)]))
+            must.assert_not_called()
+
+    def test_conversation_backlog_pages_canonical_state_and_searches_comments(self):
+        with patch.object(nc, 'identity', return_value={'id': 'self'}), patch.object(nc, 'query_rows', side_effect=[([{'conversation_record_id': 'a'}], False), ([], False)]) as query:
+            result = nc.backlog({}, nc.parse(['backlog', '--conversations', '--unread', '--search', "O'Brien", '--page-size', '1']))
+        self.assertEqual(result['count'], 1)
+        sql = query.call_args_list[0].args[1]
+        self.assertIn("s.user = 'self'", sql)
+        self.assertIn('s.read_version < s.activity_version', sql)
+        self.assertIn('s.activity_version > 0', sql)
+        self.assertIn("s.archived_at = ''", sql)
+        self.assertIn("'O''Brien'", sql)
+        self.assertIn('FROM notification_comments c', sql)
+        self.assertIn("s.id > 'a'", query.call_args.args[1])
+
+    def test_conversation_backlog_rejects_incompatible_filters_before_network(self):
+        for flag in ['--feedback', '--sent', '--awaiting-ack', '--overdue']:
+            with patch.object(nc, 'identity') as identity, self.assertRaises(nc.Fail):
+                nc.backlog({}, nc.parse(['backlog', '--conversations', flag]))
+            identity.assert_not_called()
+
     def test_feedback_backlog_pages_and_keeps_sender_state_separate(self):
         calls=[]
         def query(cfg,sql):

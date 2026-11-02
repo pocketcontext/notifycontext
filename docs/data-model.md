@@ -72,3 +72,60 @@ applicable individual action is primary and alternatives remain in the dropdown.
 remaining action has no arrow. Withdraw and move-to-inbox are never combined. The optional
 acknowledgement note applies to both acknowledgement variants. Menus support keyboard
 navigation, Escape and outside-click dismissal; tab order remains ordinary buttons.
+
+## Shared conversations
+
+A notification now has one chronological shared conversation. Its fixed audience is
+its sender and addressed recipients; a pending email recipient gains access only
+when the existing verified claim flow links that account. All participants can
+post repeatedly. Posting does not read or acknowledge anything. Existing
+acknowledgement notes remain private to their author and the original sender;
+neither migration nor the new comment API turns them into shared messages.
+
+`notification_comments` contains notification, author, body_markdown (required,
+maximum 4000 characters), submission_key (required, maximum 200), sequence, and
+created/updated. Authors and timestamps are server assigned. The positive sequence
+is contiguous within each notification and supplies stable chronological pagination.
+Comments cannot be edited or deleted. POST the standard collection endpoint with
+`{notification,body_markdown,submission_key}`. The author-scoped key makes identical
+retries return the existing comment; a changed notification or body conflicts.
+Concurrent posting, sequence allocation, inbox updates and the `commented` audit
+event commit atomically. New posts to withdrawn notifications are rejected; an
+identical retry of an already committed post still returns its original result.
+
+`notification_conversation_state` is canonical personal inbox state, unique per
+notification/user: latest_comment (optional), latest_at, activity_version,
+read_version, read_at, archived_at, revision and created/updated. SQL admits only
+the owner's row; collection REST reads and client create/delete are locked. All
+claimed recipients and the sender have one state. Migration copies each recipient's
+triage and the sender's private feedback state, if present, without changing their
+legacy records or emitting historical events. A sender who is not also a recipient
+and has no feedback starts with activity_version 0, read and archived; this empty
+state is excluded from inbox/archive lists. New recipients start at activity 1.
+
+A shared comment increases activity_version for every participant except its author,
+sets latest_comment/latest_at and clears read_at/archived_at. The author's state is
+unchanged, including any earlier unread activity. A new private acknowledgement
+note updates only its sender's state, clearing latest_comment so clients use the
+private feedback preview. Latest shared comments never expose other participants'
+acknowledgements, delivery addresses, read state or archive state. A newly claimed
+addressed recipient receives the existing shared history as unread.
+
+Owner-only state PATCH accepts `{expected_revision,action}` where action is `read`,
+`archive`, `unarchive` or `read_archive`. Revision is checked before idempotency, so
+stale triage cannot consume a newer comment. Read records activity_version as
+read_version; archiving alone does not read. Actions also synchronize the owner's
+legacy recipient/feedback triage without acknowledging or changing note content.
+Newly performed recipient triage actions record `conversation_read`,
+`conversation_archive` or `conversation_unarchive` audit events with the same
+private recipient visibility as legacy actions. These audit events do not emit
+additional realtime signals. Legacy recipient/feedback API actions remain supported and synchronize canonical
+state. Incoming comments advance affected legacy revisions to reject stale actions;
+legacy idempotent retries remain successful only when no canonical change is needed.
+
+Shared-comment events signal all participants' tabs, including the author's, with
+empty private realtime payloads after commit. Personal canonical/feedback triage
+signals only its owner. Fetching, search, opening a link and realtime refresh never
+read or acknowledge. Clients query comments through authenticated SQL, paginate by
+sequence, and include comments in authorized search. There are no nested replies,
+participant editing, attachments, comment edits or implicit acknowledgements.

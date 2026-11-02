@@ -113,6 +113,16 @@ def main():
         later=query(req,f"SELECT * FROM notification_recipients WHERE notification='{n['id']}'",et)[0]
         req('PATCH',path('notification_recipients')+'/'+later['id'],{'action':'acknowledge','expected_revision':later['revision'],'acknowledgement_markdown':'Later comment'},et)
         a.changed();e.changed();a.quiet();b.quiet();o.quiet()
+        shared_body={'notification':n['id'],'body_markdown':'Shared conversation reply','submission_key':'shared-one'}
+        shared=req('POST',path('notification_comments'),shared_body,bt)
+        for stream_ in [a,b,e]:stream_.changed()
+        for stream_ in [a,b,e,o]:stream_.quiet()
+        assert query(req,f"SELECT id FROM notification_comments WHERE id='{shared['id']}'",et)
+        req('POST',path('notification_comments'),shared_body,bt)
+        for stream_ in [a,b,e,o]:stream_.quiet()
+        state=query(req,f"SELECT * FROM notification_conversation_state WHERE notification='{n['id']}'",et)[0]
+        req('PATCH',path('notification_conversation_state')+'/'+state['id'],{'action':'read_archive','expected_revision':state['revision']},et)
+        e.changed();a.quiet();b.quiet();o.quiet();e.quiet()
         req('PATCH', path('notifications') + '/' + n['id'], {'action': 'withdraw', 'expected_revision': 1, 'withdrawal_reason': 'Synthetic replacement'}, at)
         for s in [a, b, e]: s.changed()
         req('POST', path('notifications'), dict(body, submission_key='rollback', subject='Synthetic audit failure'), at, expected=400)

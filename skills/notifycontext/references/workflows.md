@@ -20,6 +20,7 @@ notifycontext login --url https://notify.pocketcontext.com --email you@pocketcon
 notifycontext whoami
 notifycontext check
 notifycontext query 'SELECT id,name FROM user_directory ORDER BY name'
+notifycontext backlog --conversations --unread
 notifycontext backlog --unread
 notifycontext backlog --awaiting-ack --overdue
 notifycontext backlog --search 'supplier renewal' --include-archived --include-withdrawn
@@ -89,7 +90,8 @@ or signup filters. Archive/unarchive use the same update shape. These IDs are no
 recipient IDs and cannot be used with recipient `bulk`. A later recipient comment
 resurfaces the entry unread; stale revisions return a conflict and require a fresh read.
 Opening, querying or summarizing remains read-only. Existing recipient backlog behavior
-is unchanged; inspect both queues when asked for all incoming work and feedback.
+is retained for delivery/acknowledgement workflows; use `backlog --conversations`
+for the complete personal inbox including new shared comments.
 
 For explicitly requested combined triage, recipient `update`/`bulk` accept
 `acknowledge_archive` (optional acknowledgement_markdown) and `read_archive`.
@@ -98,3 +100,62 @@ These are atomic; use the latest expected_revision and re-read after a conflict 
 uncertain outcome. Acknowledge & archive confirms receipt/understanding, marks read
 and archives. Read & archive does not acknowledge. Never infer permission to
 acknowledge or archive from a request merely to read/summarize a notification.
+
+
+## Repeated comments and conversation triage
+
+Use the canonical conversation inbox for all incoming work, including shared replies:
+
+```sh
+notifycontext backlog --conversations --unread
+notifycontext backlog --conversations --search 'renewal' --include-archived
+notifycontext conversation NOTIFICATION_ID --page-size 50
+```
+
+`--conversations` returns one row per notification with `conversation_record_id`
+and `conversation_revision`, personal read/archive state and the latest incoming
+shared comment when present. Sent notifications with no incoming activity are
+omitted, even with `--include-archived`; use `--sent` for sent history. Date filters
+use latest incoming activity time. It
+cannot combine with `--feedback`, `--sent`, acknowledgement, overdue or signup
+filters; use recipient backlog separately for those tasks. Default inbox excludes
+archived and withdrawn records; include each explicitly for history. Searching
+includes shared comments and only acknowledgement notes visible to the caller.
+
+`conversation` retrieves every shared comment through the sequence observed when
+retrieval starts, in chronological order. It shrinks pages when SQL responses are
+truncated and fails instead of claiming an incomplete result is complete. Concurrent
+new comments require a refresh. Private acknowledgement notes remain separate; use
+the filtered recipient records to read notes you are allowed to see. Neither command
+marks anything read. An empty conversation is distinct from an inaccessible record.
+
+After an explicit request to reply, generate and retain a submission key with
+`newkey`, and retain the exact notification ID and payload. Comments are visible to
+the sender and all recipients, including a pending recipient after verified claim.
+Use stdin to avoid shell expansion of Markdown:
+
+```sh
+notifycontext comment NOTIFICATION_ID - <<'JSON'
+{"body_markdown":"Can we also review the renewal date?","submission_key":"retain-one-stable-key-per-comment"}
+JSON
+```
+
+Repeat this command with the same key and payload after an uncertain outcome;
+identical retries return the original comment, changed payloads conflict. Each new
+comment requires a new key. Comments cannot be edited/deleted and do not acknowledge
+the notification. Corrections are new comments. Withdrawn conversations retain
+readable history but reject new comments. Do not publish private acknowledgement
+notes to the shared conversation without explicit authorization.
+
+For explicitly requested personal triage, use the state ID and revision returned
+by `backlog --conversations` or `get notification_conversation_state ID`:
+
+```sh
+notifycontext update notification_conversation_state STATE_ID '{"expected_revision":1,"action":"read_archive"}'
+```
+
+`read`, `archive`, `unarchive` and `read_archive` are supported. Canonical actions
+synchronize your recipient/feedback read/archive state, without acknowledging.
+Stale revisions require a fresh read and reassessment; never blindly replay a
+triage action after new comments. Another participant's comment resurfaces the
+conversation unread even after archive. Your own comment never marks it read.

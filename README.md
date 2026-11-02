@@ -14,7 +14,7 @@ Recipients explicitly mark read, acknowledge (with an optional Markdown note), a
 
 Manual availability is available, busy, in a meeting, away or not set, with an optional message and expiry. Expired statuses display as not set. Availability is visible to colleagues; alert-pause preferences are private. Neither status nor pausing alerts prevents inbox delivery. Deadlines do not schedule reminders.
 
-The browser supplies Inbox, Sent, Archived, Markdown details and preview, composition, status and alert settings. Its sidebar searches notification subjects, messages and exact IDs across the authorized backlog. Permanent `/#/notifications/<id>` links restore the selected notification after sign-in, including archived records outside the current result page. View, text search, filter and page are URL state; Copy record link omits browsing filters and Copy search link preserves them. Opening a record never marks it read or acknowledges it. Desktop alerts require permission and an open tab. Background Web Push, mobile closed-app alerts, automatic presence, calendar integration, reminders, threads and attachments are outside this version. Browser/OS settings may suppress desktop alerts; dismissing one does not acknowledge the notification.
+The browser supplies Inbox, Sent, Archived, Markdown details and preview, composition, status and alert settings. Its sidebar searches notification subjects, messages and exact IDs across the authorized backlog. Permanent `/#/notifications/<id>` links restore the selected notification after sign-in, including archived records outside the current result page. View, text search, filter and page are URL state; Copy record link omits browsing filters and Copy search link preserves them. Opening a record never marks it read or acknowledges it. Desktop alerts require permission and an open tab. Background Web Push, mobile closed-app alerts, automatic presence, calendar integration, reminders and attachments are outside this version. Notifications support shared chronological conversations with their original participants. Browser/OS settings may suppress desktop alerts; dismissing one does not acknowledge the notification.
 
 The browser favicon overlays the unread inbox count on the NotifyContext mark; the
 page title and sidebar show the exact count. Archived and withdrawn notifications
@@ -164,6 +164,7 @@ Use the pinned binary and synthetic isolated databases:
 
 ```sh
 python3 tests/integration.py --binary /absolute/path/to/pinned/pocketcontext
+python3 tests/conversations.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/security.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/realtime.py --binary /absolute/path/to/pinned/pocketcontext
 python3 tests/snapshot_freshness.py --binary /absolute/path/to/pinned/pocketcontext
@@ -336,8 +337,8 @@ it back. Sent always retains the original notification. Blank acknowledgements d
 resurface; emoji comments do. Opening details still never marks anything read.
 
 The migration includes existing comments (even when recipients archived their copy),
-without historical desktop alerts. Full conversations remain outside this release:
-each recipient still has one immutable acknowledgement. See the
+without historical desktop alerts. Each recipient still has one immutable acknowledgement. Shared conversations provide
+separate repeat comments without changing historical acknowledgement-note visibility. See the
 [local synthetic preview](frontend/README.md#preview-sender-inbox-resurfacing).
 
 Agents can use `backlog --feedback --unread` for the sender comment queue and
@@ -345,10 +346,44 @@ Agents can use `backlog --feedback --unread` for the sender comment queue and
 (or `archive` / `unarchive`) for explicit triage. `backlog` without `--feedback`
 continues to return recipient delivery rows; `--sent` retains its existing semantics.
 Feedback `--since`/`--before` filter the latest comment time. Read-only retrieval never
-changes either queue. The source client must be installed to use these new commands;
-the published skill launcher remains pinned until a client release is published.
+changes either queue. Use the matching published client launcher for the current server schema.
 
 Triage now uses split buttons: the labeled primary action combines compatible work
 (**Acknowledge & archive**, **Read & archive**, **Read & archive comments**), while
 the arrow offers individual actions. Each combined action is atomic and version-checked.
 Acknowledgement remains explicit; reading/archiving alone never acknowledges.
+
+## Conversations
+
+Each notification has one shared chronological conversation. Its sender and claimed
+recipients can post multiple immutable Markdown comments; corrections are new comments.
+The original addressed participants are fixed. A pending email recipient gains access
+to the shared history when their verified account claims delivery. Historical
+acknowledgement notes keep their original sender/author visibility and are not copied
+into the shared conversation.
+
+Commenting does not acknowledge the original request. New comments return the
+conversation to every other participant's inbox as unread, even after archiving.
+Reading and archiving are personal, explicit actions; opening details or fetching
+comments never marks them read. Posting does not consume the author's unread work.
+Withdrawn notifications retain their history but accept no new comments.
+
+Comments are stored atomically with participant inbox updates and audit history.
+An author-scoped submission key makes retries duplicate-safe. Conversation state
+uses revisions so an old read/archive action cannot consume newly arrived activity.
+Long conversations paginate, and browser search includes authorized shared comments.
+Native desktop alerts still require an open tab and permission.
+
+Conversation browser validation uses the built assets and synthetic accounts:
+
+```sh
+python3 frontend/tests/conversations.py --binary /absolute/path/to/pinned/pocketcontext
+```
+
+The CLI provides `comment NOTIFICATION_ID JSON`, `conversation NOTIFICATION_ID`,
+and `backlog --conversations`. Use a retained `submission_key` and `body_markdown`
+for comment publication; `conversation` reads all shared comments through the
+initial sequence without changing state. Personal triage uses
+`update notification_conversation_state ID` with `expected_revision` and
+`action` (`read`, `archive`, `unarchive` or `read_archive`). See the skill workflows
+for complete examples.

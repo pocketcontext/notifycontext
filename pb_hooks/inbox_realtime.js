@@ -30,11 +30,14 @@ function changed(e) {
   // browser re-reads its authorized SQL snapshot; delivery is best effort.
   try {
     const event = e.record;
+    // Canonical triage emits its owner-only signal once after the transaction.
+    if(event.collection().name==='notification_events' && event.getString('event_type').startsWith('conversation_'))return;
     const notification = e.app.findRecordById('notifications', event.getString('notification'));
     const targets = {[notification.getString('sender')]: true};
-    const feedback = event.collection().name === 'notification_feedback';
+    const personal = ['notification_feedback','notification_conversation_state'].includes(event.collection().name);
+    if(personal){for(const key of Object.keys(targets))delete targets[key];targets[event.getString('user')]=true;}
     const recipientId = event.getString('notification_recipient');
-    const recipients = feedback ? [] : recipientId
+    const recipients = personal ? [] : recipientId
       ? [e.app.findRecordById('notification_recipients', recipientId)]
       : e.app.findRecordsByFilter('notification_recipients', 'notification = {:id}', '', 0, 0, {id: notification.id});
     for (const recipient of recipients) {

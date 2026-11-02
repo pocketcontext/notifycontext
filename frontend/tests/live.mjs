@@ -39,7 +39,7 @@ try {
   // Recovery re-opens the same selection automatically once the window resets.
   await page.locator('.detail-title').filter({hasText:'Supplier renewal ready'}).waitFor({timeout:40000});
   await expect(page.getByText(/Too Many Requests/)).toHaveCount(0);
-  await expect(await revealAction(page,'Mark read')).toBeVisible();
+  await expect(await revealAction(page,'Mark conversation read')).toBeVisible();
   await page.locator('#connection').filter({hasText:'Connected'}).waitFor({timeout:40000});
   assert.deepEqual(errors,[]);
   console.log(`Rate-limited reads recovered: ${log.length-before} SQL requests from the browser during the cooldown and recovery.`);
@@ -69,16 +69,16 @@ try {
  // Opening the detail shows only Bob's own recipient row and its actions.
  await expect(page.locator('.recipient-status')).toHaveCount(0);await expect(page.locator('.references a')).toHaveText(/Renewal terms/);
  mark=log.length;
- await chooseAction(page,'Mark read');
- await page.getByRole('button',{name:'Mark read',exact:true}).waitFor({state:'detached'});
+ await chooseAction(page,'Mark conversation read');
+ await page.getByRole('button',{name:'Mark conversation read',exact:true}).waitFor({state:'detached'});
  // A separate open tab must receive the committed change before fallback polling.
  await expect(peer).toHaveTitle('NotifyContext',{timeout:5000});await peer.close();
  await page.waitForTimeout(3000);counts.action=log.length-mark;
  await page.getByLabel('Optional acknowledgement note').fill('Received; reviewing this afternoon.');
  await chooseAction(page,'Acknowledge');
  await page.locator('.acknowledgement').filter({hasText:'Received; reviewing this afternoon.'}).waitFor();
- await chooseAction(page,'Archive');
- await page.getByRole('button',{name:'Move to inbox',exact:true}).waitFor();
+ await chooseAction(page,'Archive conversation');
+ await page.getByRole('button',{name:'Move conversation to inbox',exact:true}).waitFor();
  await expect(page.locator('.notification-row').filter({hasText:'Supplier renewal ready'})).toHaveCount(0);
  await page.getByRole('button',{name:'Archived',exact:false}).click();
  await page.locator('.notification-row').filter({hasText:'Supplier renewal ready'}).waitFor();

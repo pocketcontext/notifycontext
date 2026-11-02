@@ -26,18 +26,18 @@ try{
  await expect(page.locator('.notification-row')).toHaveCount(1);
  await expect(page.locator('.notification-row')).toContainText('Preview Reviewer replied');
  await page.locator('.notification-row').click();
- await expect(await revealAction(page,'Mark comments read',true)).toBeVisible();
+ await expect(await revealAction(page,'Mark conversation read',true)).toBeVisible();
  await expect(page.locator('#unread-count')).toHaveText('19'); // Opening is read-only.
- await chooseAction(page,'Mark comments read',true);
+ await chooseAction(page,'Mark conversation read',true);
  await expect(page.locator('#unread-count')).toHaveText('18');
  await expect(page.locator('.notification-row')).not.toHaveClass(/unread/);
- await chooseAction(page,'Archive comments',true);
+ await chooseAction(page,'Archive conversation',true);
  await expect(page.locator('.notification-row')).toHaveCount(0);
  await page.reload();await expect(page.locator('#unread-count')).toHaveText('18');
  await page.getByRole('button',{name:'Archived',exact:true}).click();
  await expect(page.locator('.notification-row')).toHaveCount(1);
  await page.locator('.notification-row').click();
- await expect(await revealAction(page,'Move comments to inbox',true)).toBeVisible();
+ await expect(await revealAction(page,'Move conversation to inbox',true)).toBeVisible();
  await page.getByRole('button',{name:'Sent',exact:false}).click();
  await expect(page.locator('.notification-row')).toHaveCount(1); // Sent survives sender archive.
  await page.locator('[data-view="inbox"]').click();await page.locator('#search').fill('');
@@ -48,7 +48,7 @@ try{
  const first=page.locator('.notification-row').first();
  await expect(first).toContainText('Later Reviewer replied');await expect(first).toContainText('Another useful comment');await expect(first).toHaveClass(/unread/);
  await expect.poll(()=>page.evaluate(()=>window.notificationCalls.length)).toBe(1);
- await first.click();await expect(await revealAction(page,'Mark comments read',true)).toBeVisible();
+ await first.click();await expect(await revealAction(page,'Mark conversation read',true)).toBeVisible();
  await page.getByRole('button',{name:'Refresh notifications',exact:true}).click();
  assert.equal(await page.evaluate(()=>window.notificationCalls.length),1,'Refresh must not duplicate alerts');
  await page.screenshot({path:'test-results/feedback-preview.png',fullPage:true});

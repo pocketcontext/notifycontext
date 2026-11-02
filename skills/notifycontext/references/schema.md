@@ -19,4 +19,31 @@ PATCH `notifications/ID` accepts `{expected_revision,action:"withdraw",withdrawa
   latest_at, activity_version/read_version, read_at, archived_at and revision. Created by
   nonempty acknowledgement comments from others and by the historical backfill. Only
   the sender can read it through SQL or PATCH read/archive/unarchive with expected_revision.
-  Recipient state is independent; no additional conversation messages are introduced.
+  Legacy acknowledgement notes remain private to the author and sender; they are never copied into shared comments.
+
+
+## Shared conversations
+
+- `notification_comments`: immutable `notification`, server-attributed `author`,
+  `body_markdown` (1–4000 characters), `submission_key` (1–200), server-assigned
+  contiguous `sequence` per notification, and timestamps. SQL admits only the
+  original sender and bound recipients. An addressed recipient can see the shared
+  history after verified claim. No participant editing or additions are supported.
+- `notification_conversation_state`: owner-private `notification`, `user`,
+  `latest_comment`, `latest_at`, `activity_version`, `read_version`, `read_at`,
+  `archived_at`, `revision`, and timestamps. This is the canonical personal inbox
+  state. `latest_comment` can be empty when the activity was the original delivery
+  or a private acknowledgement. Personal state is not visible to other participants.
+
+POST `/api/collections/notification_comments/records` accepts only
+`{notification,body_markdown,submission_key}`. A stable author/key returns the same
+comment on an identical retry; changed content or notification conflicts. Only
+active participants may post, and withdrawn notifications reject new comments.
+Posting atomically records the comment and resurfaces all other participants'
+conversations unread; author state is unchanged. Comments never acknowledge.
+
+PATCH `notification_conversation_state/ID` accepts
+`{expected_revision,action:"read"|"archive"|"unarchive"|"read_archive"}`. Version
+checks prevent a stale action consuming new comments. Canonical actions synchronize
+own recipient/feedback read/archive state. Fetching never mutates any state.
+Historical acknowledgement notes retain their original filtered visibility.

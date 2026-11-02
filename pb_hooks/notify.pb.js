@@ -1,5 +1,5 @@
-onRecordCreateRequest(e=>require(`${__hooks}/notify.js`).write(e),'notifications','user_status','notification_preferences');
-onRecordUpdateRequest(e=>require(`${__hooks}/notify.js`).write(e),'notifications','notification_recipients','notification_feedback','user_status','notification_preferences');
-onRecordCreateRequest(()=>{throw new ForbiddenError('Server-managed collection');},'notification_recipients','notification_references','notification_events','notification_feedback');
-onRecordUpdateRequest(()=>{throw new ForbiddenError('Immutable server-managed collection');},'notification_references','notification_events');
-onRecordDeleteRequest(()=>{throw new ForbiddenError('History is retained; withdraw or archive instead');},'notifications','notification_recipients','notification_references','notification_events','notification_feedback','user_status','notification_preferences');
+onRecordCreateRequest(e=>require(`${__hooks}/notify.js`).write(e),'notifications','notification_comments','user_status','notification_preferences');
+onRecordUpdateRequest(e=>require(`${__hooks}/notify.js`).write(e),'notifications','notification_recipients','notification_feedback','notification_conversation_state','user_status','notification_preferences');
+onRecordCreateRequest(()=>{throw new ForbiddenError('Server-managed collection');},'notification_recipients','notification_references','notification_events','notification_feedback','notification_conversation_state');
+onRecordUpdateRequest(()=>{throw new ForbiddenError('Immutable server-managed collection');},'notification_references','notification_events','notification_comments');
+onRecordDeleteRequest(()=>{throw new ForbiddenError('History is retained; withdraw or archive instead');},'notifications','notification_recipients','notification_references','notification_events','notification_feedback','notification_comments','notification_conversation_state','user_status','notification_preferences');

@@ -22,9 +22,10 @@ def main():
             n=r('POST',path('notifications'),{'subject':'Synthetic renewal','body_markdown':'## Please review\n**Supplier renewal**','kind':'review_requested','ack_required':True,'submission_key':'restore-fixture','recipients':[recipient['id']],'recipient_emails':['future@example.test'],'references':[{'kind':'document','label':'Terms','url':'https://example.test/terms','external_id':'revision-1'}]},st)
             rec=query(r,'SELECT * FROM notification_recipients',rt)[0]
             r('PATCH',path('notification_recipients')+'/'+rec['id'],{'action':'acknowledge','acknowledgement_markdown':'Received, review tomorrow.','expected_revision':1},rt)
+            r('POST',path('notification_comments'),{'notification':n['id'],'body_markdown':'Shared follow-up','submission_key':'restore-comment'},st)
             r('POST',path('user_status'),{'availability':'busy','message':'Reviewing'},rt)
             r('POST',path('notification_preferences'),{'alerts_paused_until':'2030-01-01T00:00:00Z'},rt)
-            expected={t:query(r,'SELECT * FROM '+t+' ORDER BY id',rt) for t in ['notifications','notification_recipients','notification_references','notification_events','user_status','notification_preferences']}
+            expected={t:query(r,'SELECT * FROM '+t+' ORDER BY id',rt) for t in ['notifications','notification_recipients','notification_references','notification_events','notification_comments','notification_conversation_state','user_status','notification_preferences']}
             pending_expected=query(r,"SELECT * FROM notification_recipients WHERE recipient = '' ORDER BY id",st)
             assert len(pending_expected)==1 and pending_expected[0]['addressed_email']=='future@example.test' and pending_expected[0]['claim_expires_at']
             r('POST','/api/backups',{'name':'synthetic-recovery.zip'},op,expected=204)
@@ -59,6 +60,8 @@ def main():
                 other=request('POST','/api/collections/users/auth-with-password',{'identity':'outsider@example.test','password':PASSWORD})
                 assert query(request,'SELECT * FROM notifications',other['token'])==[]
                 assert query(request,'SELECT * FROM notification_preferences',other['token'])==[]
+                assert query(request,'SELECT * FROM notification_comments',other['token'])==[]
+                assert query(request,'SELECT * FROM notification_conversation_state',other['token'])==[]
             finally:proc.terminate();proc.wait(timeout=20)
     print('PASS: populated backup restores identities, Markdown, acknowledgement, references, history, status/preferences and privacy')
 

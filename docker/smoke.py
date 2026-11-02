@@ -218,6 +218,8 @@ def record_snapshot(client, notification_id):
         'notification_recipients': f"notification = '{notification_id}'",
         'notification_references': f"notification = '{notification_id}'",
         'notification_events': f"notification = '{notification_id}'",
+        'notification_comments': f"notification = '{notification_id}'",
+        'notification_conversation_state': f"notification = '{notification_id}'",
         'user_directory': f"id = '{client.user['id']}'",
         'user_status': f"user = '{client.user['id']}'",
         'notification_preferences': f"user = '{client.user['id']}'",
@@ -233,14 +235,21 @@ def write_record(client, user_id):
     status, _, reply = http('PATCH', client.base + '/api/collections/notification_recipients/records/' + recipient_id,
                            {'expected_revision': revision, 'action': 'acknowledge', 'acknowledgement_markdown': 'Received; synthetic review planned.'}, client.token)
     check(status == 200 and bool(reply.get('acknowledged_at')), 'synthetic recipient acknowledgement is persisted')
+    for index in range(2):
+        payload = {'notification': notification_id, 'body_markdown': f'Synthetic conversation comment {index + 1}.',
+                   'submission_key': f'smoke-comment-{index}'}
+        comment = json.loads(client.run('create', 'notification_comments', json.dumps(payload)))
+        retry = json.loads(client.run('create', 'notification_comments', json.dumps(payload)))
+        check(comment['id'] == retry['id'], 'comment publication retries retain one immutable comment')
     client.run('create', 'user_status', json.dumps({'availability': 'busy', 'message': 'Synthetic review', 'expires_at': '2099-01-01T12:00:00Z'}))
     client.run('create', 'notification_preferences', json.dumps({'alerts_paused_until': '2099-01-01T12:00:00Z'}))
     pending = client.sql(f"SELECT recipient,addressed_email,claimed_at,claim_expires_at FROM notification_recipients WHERE notification = '{notification_id}' AND recipient = ''")
     check(len(pending) == 1 and pending[0][1] == 'future-colleague@example.test' and not pending[0][2] and bool(pending[0][3]),
           'pending email destination and expiry are stored without an auth identity')
     snapshot = record_snapshot(client, notification_id)
-    check(all(snapshot.values()) and len(snapshot['notification_events']) == 2,
-          'populated fixture includes all seven SQL tables and publication/acknowledgement history')
+    check(all(snapshot.values()) and len(snapshot['notification_comments']) == 2
+          and len(snapshot['notification_events']) == 4,
+          'populated fixture includes conversation comments, personal state and audit history')
     return notification_id, snapshot
 
 

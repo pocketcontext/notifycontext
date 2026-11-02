@@ -53,3 +53,35 @@ Triage uses a split button: **Acknowledge & archive**, **Read & archive**, or
 individual actions. Optional acknowledgement notes are saved with either acknowledgement
 choice. A sole remaining action has no dropdown. Combined actions use one atomic REST
 request; newer comments still resurface, and stale versions are rejected.
+
+## Shared conversations
+
+Each notification has a shared, chronological conversation for its sender and recipients.
+Any participant can post multiple immutable Markdown comments without acknowledging the
+notification. Existing acknowledgement notes remain private to the note author and sender;
+they are labelled separately. Recipients who later claim an originally addressed notification
+can read its conversation. Withdrawn notifications retain history but reject new comments.
+
+The latest 30 comments display in chronological order. **Load earlier comments** prepends
+older pages. New activity updates the open conversation while retaining comment and
+acknowledgement drafts. Drafts remain only in this tab's memory and clear on account changes
+or sign-out. Failed posting retains the draft and reuses its submission key when retrying
+identical text. No write is retried automatically.
+
+One personal inbox row combines notification delivery, private acknowledgement feedback and
+shared replies. Incoming comments return other participants' rows to Inbox as unread; the
+author's own state does not change. **Mark conversation read**, **Archive conversation** and
+**Read & archive conversation** are explicit, revision-checked actions. Acknowledgement
+remains a separate action, including **Acknowledge & archive**. Opening a conversation does
+not mark anything read. Sent-only notifications do not appear in Archived before incoming
+activity. Search includes authorized shared comments and private notes.
+
+Additional actual-server browser validation:
+
+```sh
+python3 frontend/tests/conversations.py --binary /absolute/path/to/pinned/pocketcontext
+```
+
+This checks repeated comments, sender replies, private historical notes, unchanged author
+state, archived resurfacing, realtime refresh, draft preservation, search, chronological
+pagination and mobile layout with synthetic accounts. Desktop alert APIs remain mocked.

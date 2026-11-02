@@ -50,6 +50,8 @@ jobs:
         run: python3 notifycontext/tests/maintenance.py --binary pocketcontext/bin/pocketcontext
       - name: Test notifications
         run: python3 notifycontext/tests/integration.py --binary pocketcontext/bin/pocketcontext
+      - name: Test shared conversations and personal inbox state
+        run: python3 notifycontext/tests/conversations.py --binary pocketcontext/bin/pocketcontext
       - name: Test atomic combined actions
         run: python3 notifycontext/tests/combined_actions.py --binary pocketcontext/bin/pocketcontext
       - name: Test sender feedback inbox and historical migration
@@ -109,3 +111,5 @@ jobs:
         run: python3 notifycontext/frontend/tests/live.py --binary pocketcontext/bin/pocketcontext
       - name: Test feedback browser workflow
         run: python3 notifycontext/frontend/tests/feedback.py --binary pocketcontext/bin/pocketcontext
+      - name: Test shared conversation browser workflow
+        run: python3 notifycontext/frontend/tests/conversations.py --binary pocketcontext/bin/pocketcontext

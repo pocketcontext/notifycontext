@@ -14,9 +14,9 @@ const now=new Date().toISOString();
 const initial={id:'note00000000001',sender,subject:'Supplier renewal ready',body_markdown:'## Review requested\n\nPlease review the [handoff](https://example.com).\n\n| Item | Status |\n| --- | --- |\n| Quote | Ready |\n\n```js\nconst approved = false;\n```\n\n<img src=x onerror="window.attacked=true">\n\n[bad](javascript:window.attacked=true)\n\n[mail](mailto:colleague@example.com)',kind:'review_requested',ack_required:true,due_at:'',withdrawn_at:'',withdrawal_reason:'',revision:1,created:now};
 const users={[user]:'Vamsi',[sender]:'Jack'};
 // Query shapes: consolidated refresh, consolidated detail, joined directory, and the separate fallback/legacy reads.
-const classify=sql=>sql.startsWith('WITH page')?'inbox':sql.includes(') AS recipients')?'detail':sql.includes('FROM user_directory d LEFT JOIN')?'directory':sql.includes('recipient_total') || sql.startsWith('SELECT * FROM notifications')?'note':sql.includes('FROM notification_recipients r LEFT JOIN')?'recipients':sql.includes('FROM notification_references')?'references':sql.includes('FROM user_directory')?'users':sql.includes('FROM user_status')?'statuses':sql.includes('FROM notification_preferences')?'preferences':(sql.startsWith('SELECT n.id, n.created') || sql.includes('AS activity_key FROM'))?'latest':sql.includes('count(*) AS total')?'unread':'list';
+const classify=sql=>sql.startsWith('SELECT id,author,body_markdown,sequence,created FROM notification_comments')?'comments':sql.startsWith('WITH page')?'inbox':sql.includes(') AS recipients')?'detail':sql.includes('FROM user_directory d LEFT JOIN')?'directory':sql.includes('recipient_total') || sql.startsWith('SELECT * FROM notifications')?'note':sql.includes('FROM notification_recipients r LEFT JOIN')?'recipients':sql.includes('FROM notification_references')?'references':sql.includes('FROM user_directory')?'users':sql.includes('FROM user_status')?'statuses':sql.includes('FROM notification_preferences')?'preferences':(sql.startsWith('SELECT n.id, n.created') || sql.includes('AS activity_key FROM'))?'latest':sql.includes('count(*) AS total')?'unread':'list';
 const viewerOf=request=>{try{return JSON.parse(Buffer.from(request.headers().authorization.split('.')[1],'base64url')).id;}catch{return '';}};
-async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false,preference:initialPreference=null,body,subject}={}) {
+async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false,preference:initialPreference=null,body,subject,conversation=false,commentCount=0}={}) {
   let releaseRead;const readGate=new Promise(resolve=>{releaseRead=resolve;});
   const writes=[],queries=[],oversize=new Set(),tooBig=new Set(),statuses=[];let preference=initialPreference,unreadOverride=null;
   let notes=Array.from({length:count},(_,i)=>({...initial,id:'note'+String(i+1).padStart(11,'0'),subject:i?'Notification '+(i+1):subject||initial.subject,body_markdown:i?initial.body_markdown:body||initial.body_markdown}));
@@ -27,6 +27,8 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
       {...recipients[0],id:'pending00000001',recipient:'',recipient_name:null,addressed_email:'new.colleague@example.test',claimed_at:'',claim_expires_at:new Date(Date.now()+30*86400000).toISOString()},
       {...recipients[0],id:'expired00000001',recipient:'',recipient_name:null,addressed_email:'expired.colleague@example.test',claimed_at:'',claim_expires_at:'2020-01-01 00:00:00.000Z'},...recipients.slice(1)];
   }
+  const comments=Array.from({length:commentCount},(_,i)=>({id:'comment'+String(i+1).padStart(8,'0'),notification:notes[0].id,author:sender,body_markdown:'Shared comment '+(i+1),sequence:i+1,created:now}));
+  const conversationState={id:'state0000000001',read_at:'',archived_at:'',revision:1,activity_version:commentCount+1};
   const result=records=>({columns:Object.keys(records[0]||{}),rows:records.map(Object.values),truncated:false});
   const literal=(sql,pattern)=>{const match=sql.match(pattern);return match?match[1].replaceAll("''","'"):null;};
   const page31=sql=>({offset:Number(sql.match(/OFFSET (\d+)\s*$/)?.[1] || 0),limit:Number(sql.match(/LIMIT (\d+) OFFSET \d+\s*$/)?.[1] || 1000)});
@@ -37,7 +39,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
     if(sql.includes(" AND (r.read_at='' OR r.read_at IS NULL)"))items=items.filter(({r})=>!r.read_at);
     if(sql.includes('n.ack_required=1'))items=items.filter(({n,r})=>n.ack_required && !n.withdrawn_at && !r?.acknowledged_at);
     if(search!==null)items=items.filter(({n})=>n.id===search || n.subject.toLowerCase().includes(search.toLowerCase()) || n.body_markdown.toLowerCase().includes(search.toLowerCase()));
-    return items.slice(offset,offset+limit).map(({n,r})=>({id:n.id,sender:n.sender,subject:n.subject,excerpt:[...n.body_markdown].slice(0,140).join(''),...(sql.includes('n.*')?n:{}),kind:n.kind,ack_required:n.ack_required,withdrawn_at:n.withdrawn_at,created:n.created,recipient_record:r?.id ?? null,read_at:r?.read_at ?? null,acknowledged_at:r?.acknowledged_at ?? null,archived_at:r?.archived_at ?? null,recipient_revision:r?.revision ?? null}));
+    return items.slice(offset,offset+limit).map(({n,r})=>({id:n.id,sender:n.sender,subject:n.subject,excerpt:[...n.body_markdown].slice(0,140).join(''),...(sql.includes('n.*')?n:{}),kind:n.kind,ack_required:n.ack_required,withdrawn_at:n.withdrawn_at,created:n.created,recipient_record:r?.id ?? null,read_at:r?.read_at ?? null,acknowledged_at:r?.acknowledged_at ?? null,archived_at:r?.archived_at ?? null,recipient_revision:r?.revision ?? null,...(conversation?{conversation_record:conversationState.id,activity_version:conversationState.activity_version}: {})}));
   }
   const latest=viewer=>notes.filter(n=>!n.withdrawn_at && recipients.some(r=>r.notification===n.id && r.recipient===viewer)).slice(0,100).map(n=>({id:n.id,created:n.created}));
   const unread=viewer=>unreadOverride ?? recipients.filter(r=>r.recipient===viewer && !r.read_at && !r.archived_at && !notes.find(n=>n.id===r.notification)?.withdrawn_at).length;
@@ -46,12 +48,13 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
   const noteFor=(sql,viewer)=>{const id=literal(sql,/(?:n\.id|WHERE id)=\'([a-z0-9]{15})\'/);const n=notes.find(item=>item.id===id);return n && visibleNote(n,viewer)?n:null;};
   const peopleFor=(n,viewer)=>recipients.filter(r=>r.notification===n.id && (n.sender===viewer || r.recipient===viewer)).map(({notification,...r})=>({...r,recipient_name:r.recipient_name ?? users[r.recipient] ?? null}));
   const refsFor=n=>n.id===notes[0]?.id?[{id:'ref000000000001',kind:'url',label:'Supporting document',url:'https://example.com',created:now}]:[];
-  const detailNote=(n,viewer)=>{const {submission_key,updated,...fields}=n;return {...fields,recipient_total:peopleFor(n,viewer).length,reference_total:refsFor(n).length};};
+  const detailNote=(n,viewer)=>{const {submission_key,updated,...fields}=n;return {...fields,...(conversation?{conversation:JSON.stringify(conversationState)}:{}),recipient_total:peopleFor(n,viewer).length,reference_total:refsFor(n).length};};
   function answer(sql,viewer) {
     const kind=classify(sql),n=['detail','note'].includes(kind)?noteFor(sql,viewer):null;
     if(oversize.has(kind))return {columns:['x'],rows:[],truncated:true};
+    if(kind==='comments'){const before=Number(sql.match(/sequence<(\d+)/)?.[1]||0);return result(comments.filter(c=>!before || c.sequence<before).slice().reverse().slice(0,31));}
     if(kind==='inbox'){const list=sql.slice(sql.indexOf(' AS (')+5,sql.indexOf('), latest(id, created, activity_key) AS ('));return result([{unread:unread(viewer),latest:JSON.stringify(latest(viewer)),list:JSON.stringify(listRows(list,viewer)),preferences:prefs()[0]?JSON.stringify(prefs()[0]):null}]);}
-    if(kind==='detail')return result(n?[{...detailNote(n,viewer),recipients:JSON.stringify(peopleFor(n,viewer)),refs:JSON.stringify(refsFor(n))}]:[]);
+    if(kind==='detail')return result(n?[{...detailNote(n,viewer),recipients:JSON.stringify(peopleFor(n,viewer)),refs:JSON.stringify(refsFor(n)),comments:JSON.stringify(comments.slice().reverse().slice(0,31))}]:[]);
     if(kind==='directory'){const {offset,limit}=page31(sql);return result(directory().slice(offset,offset+limit));}
     if(kind==='note')return result(n?[sql.startsWith('SELECT * ')?n:detailNote(n,viewer)]:[]);
     if(kind==='recipients'){const m=notes.find(item=>sql.includes(item.id));const {offset,limit}=page31(sql);return result(m && visibleNote(m,viewer)?peopleFor(m,viewer).slice(offset,offset+limit):[]);}
@@ -85,7 +88,9 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
     } else {
       writes.push({path:url.pathname,body});
       const recipient=recipients.find(r=>url.pathname.endsWith('/'+r.id));
-      if(recipient){if(['archive','read_archive','acknowledge_archive'].includes(body.action))recipient.archived_at=now;if(body.action==='unarchive')recipient.archived_at='';if(['read','read_archive','acknowledge_archive'].includes(body.action))recipient.read_at=now;if(['acknowledge','acknowledge_archive'].includes(body.action)){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}recipient.revision++;data=recipient;}
+      if(url.pathname.includes('/notification_comments/')){data=comments.find(c=>c.submission_key===body.submission_key);if(!data){data={id:'comment'+String(comments.length+1).padStart(8,'0'),author:user,created:now,sequence:comments.length+1,...body};comments.push(data);}}
+      else if(url.pathname.includes('/notification_conversation_state/')){if(['read','read_archive'].includes(body.action)){conversationState.read_at=now;recipients[0].read_at=now;}if(['archive','read_archive'].includes(body.action)){conversationState.archived_at=now;recipients[0].archived_at=now;}conversationState.revision++;data=conversationState;}
+      else if(recipient){if(['archive','read_archive','acknowledge_archive'].includes(body.action))recipient.archived_at=now;if(body.action==='unarchive')recipient.archived_at='';if(['read','read_archive','acknowledge_archive'].includes(body.action))recipient.read_at=now;if(['acknowledge','acknowledge_archive'].includes(body.action)){recipient.acknowledged_at=now;recipient.acknowledgement_markdown=body.acknowledgement_markdown;}recipient.revision++;data=recipient;}
       else if(url.pathname.includes('notification_preferences')){preference={id:'prefs0000000001',revision:(preference?.revision || 0)+1,...body};delete preference.expected_revision;data=preference;}
       else if(url.pathname.includes('user_status')){const status={id:'status000000001',user,revision:1,...body};statuses.splice(0,statuses.length,status);data=status;}
       else data={...initial,id:'created00000001',...body};
@@ -94,7 +99,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
   await page.goto('/');if(!restore){await page.getByText('Local test sign-in').click();await page.getByLabel('Email',{exact:true}).fill('vamsi@example.test');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in',exact:true}).click();}await expect(page.locator('#view-title')).toHaveText('Inbox');await expect(page.locator('#filter-label')).toHaveText('All');await expect(page.locator('#connection')).toContainText('Connected');
-  return {writes,queries,oversize,tooBig,releaseRead,notes:()=>notes,recipients:()=>recipients,
+  return {writes,queries,oversize,tooBig,releaseRead,comments,conversationState,notes:()=>notes,recipients:()=>recipients,
     kinds:(from=0)=>queries.slice(from).map(query=>query.kind),
     setUnread(value){unreadOverride=value;},
     setPreference(value){preference=value;},
@@ -356,7 +361,7 @@ test('request budget: startup, steady refresh, detail open and recipient action'
  expect(mock.kinds(mark).sort()).toEqual(['detail','inbox']);expect(mock.writes.map(write=>write.body.action)).toEqual(['read']);
  expect(mock.writes[0].path).toMatch(/\/notification_recipients\/records\/recp00000000001$/);expect(mock.writes[0].body.expected_revision).toBe(1);
  // The list excerpt is selected in SQL; full bodies stay out of the refresh.
- const inbox=mock.queries.find(query=>query.kind==='inbox').sql;expect(inbox).not.toContain('n.*');expect(inbox).toContain('substr(n.body_markdown,1,140)');
+ const inbox=mock.queries.find(query=>query.kind==='inbox').sql;expect(inbox).not.toContain('n.*');expect(inbox).toContain('substr(COALESCE(c.body_markdown,fc.acknowledgement_markdown,n.body_markdown),1,140)');
 });
 test('direct link startup reads the detail once and hashchange avoids redundant reloads',async({page})=>{
  const mock=await setup(page,{count:65});
@@ -395,7 +400,7 @@ test('sent, archived, full-content search, filters and page boundaries',async({p
  await page.getByRole('button',{name:'Archived',exact:false}).click();await expect(page.locator('.notification-row')).toHaveCount(1);await expect(page.locator('.notification-row h2')).toHaveText('Notification 2');
  await page.getByRole('button',{name:'Inbox',exact:false}).click();await page.getByRole('button',{name:'Unread',exact:true}).click();await expect(page.locator('.notification-row')).toHaveCount(30);
  // Totals and alert inputs ignore the displayed view, filter, search and page.
- const sqls=mock.queries.filter(query=>query.kind==='inbox').map(query=>query.sql.slice(query.sql.indexOf('), latest(id, created, activity_key) AS (')));
+ const sqls=mock.queries.filter(query=>query.kind==='inbox').map(query=>query.sql.slice(query.sql.indexOf('), latest(id, created, activity_key) AS ('),query.sql.indexOf(') SELECT')));
  expect(new Set(sqls).size).toBe(1);await expect(page.locator('#unread-count')).toHaveText('58');
 });
 test('a 429 without Retry-After backs off, stays friendly and re-opens the selected detail',async({page})=>{
@@ -474,7 +479,7 @@ test('oversized aggregates fall back to complete separate reads',async({page})=>
  let mark=mock.queries.length;await page.getByRole('button',{name:'Refresh notifications'}).click();await page.waitForTimeout(800);
  expect(mock.kinds(mark)).toEqual(['inbox','latest','unread','preferences','list']);await expect(page.locator('.notification-row')).toHaveCount(1);await expect(page.locator('#unread-count')).toHaveText('1');
  await page.getByRole('button',{name:'Sent',exact:false}).click();await page.waitForTimeout(800);mark=mock.queries.length;await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
- await expect(page.locator('.recipient-status > div')).toHaveCount(3);expect(mock.kinds(mark)).toEqual(['detail','note','recipients','references']);
+ await expect(page.locator('.recipient-status > div')).toHaveCount(3);expect(mock.kinds(mark)).toEqual(['detail','note','recipients','references','comments']);
  await expect(page.locator('.references a')).toHaveCount(1);
 });
 test('an incomplete fallback recipient list is reported, never shown partially',async({page})=>{
@@ -573,4 +578,50 @@ test('split action adapts to read and archive after individual acknowledgement',
  await expect(page).toHaveTitle('NotifyContext');
  expect(writes.map(w=>w.body.action)).toEqual(['acknowledge','read_archive']);
  await expect(page.getByRole('button',{name:'Other message actions',exact:true})).toHaveCount(0);
+});
+
+
+test('shared conversation allows repeated safe comments without acknowledgement and preserves drafts',async({page})=>{
+ const mock=await setup(page,{conversation:true});
+ await page.locator('.notification-row').click();await expect(page.locator('#conversation-heading')).toHaveText('Conversation');
+ expect(mock.writes).toHaveLength(0);
+ await page.getByLabel('Add a comment').fill('**First comment** [context](https://example.com) <img src=x onerror="window.attacked=true">');
+ await page.getByRole('button',{name:'Post comment',exact:true}).click();
+ await expect(page.locator('.conversation-comment')).toHaveCount(1);
+ await expect(page.locator('.conversation-comment strong').last()).toHaveText('First comment');
+ await expect(page.locator('.conversation-comment img')).toHaveCount(0);
+ await expect(page.locator('.conversation-comment a')).toHaveAttribute('rel','noopener noreferrer');
+ await page.getByLabel('Add a comment').fill('Second comment');await page.getByRole('button',{name:'Post comment',exact:true}).click();
+ await expect(page.locator('.conversation-comment')).toHaveCount(2);
+ expect(mock.writes.map(w=>w.path)).toEqual(Array(2).fill('/api/collections/notification_comments/records'));
+ expect(mock.writes[0].body.submission_key).not.toBe(mock.writes[1].body.submission_key);
+ expect(mock.recipients()[0].acknowledged_at).toBe('');
+ await page.getByLabel('Add a comment').fill('Draft survives opening details again');
+ await page.locator('.notification-row').click();await expect(page.getByLabel('Add a comment')).toHaveValue('Draft survives opening details again');
+ await page.getByRole('button',{name:'Mark conversation read',exact:true}).click();await expect(page.getByLabel('Add a comment')).toHaveValue('Draft survives opening details again');
+ expect(mock.writes.at(-1).body.action).toBe('read');
+});
+
+test('uncertain comment posting keeps a stable retry key and full draft',async({page})=>{
+ const mock=await setup(page,{conversation:true});let first=true;
+ await page.route('**/api/collections/notification_comments/records',async route=>{
+  if(first){first=false;mock.writes.push({path:new URL(route.request().url()).pathname,body:route.request().postDataJSON()});await route.abort('failed');}else await route.fallback();
+ });
+ await page.locator('.notification-row').click();await page.getByLabel('Add a comment').fill('Retry this exact comment');
+ await page.getByRole('button',{name:'Post comment',exact:true}).click();await expect(page.locator('#comment-error')).not.toBeEmpty();
+ await expect(page.getByLabel('Add a comment')).toHaveValue('Retry this exact comment');
+ await page.getByRole('button',{name:'Post comment',exact:true}).click();await expect(page.locator('.conversation-comment')).toHaveCount(1);
+ expect(mock.writes[0].body).toEqual(mock.writes[1].body);
+});
+
+test('long conversation pages chronologically on mobile and withdrawn threads are read-only',async({page})=>{
+ await page.setViewportSize({width:390,height:844});const mock=await setup(page,{conversation:true,commentCount:65});
+ await page.locator('.notification-row').click();await expect(page.locator('.conversation-comment')).toHaveCount(30);
+ await page.getByRole('button',{name:'Load earlier comments',exact:true}).click();await expect(page.locator('.conversation-comment')).toHaveCount(60);
+ await page.getByRole('button',{name:'Load earlier comments',exact:true}).click();await expect(page.locator('.conversation-comment')).toHaveCount(65);
+ await expect(page.locator('.conversation-comment').first()).toContainText('Shared comment 1');await expect(page.locator('.conversation-comment').last()).toContainText('Shared comment 65');
+ await expect(page.getByRole('button',{name:'Load earlier comments',exact:true})).toBeHidden();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(mock.writes).toHaveLength(0);
+ mock.notes()[0].withdrawn_at=now;mock.notes()[0].withdrawal_reason='No longer needed';
+ await page.getByRole('button',{name:'← Back to inbox',exact:true}).click();await page.locator('.notification-row').click();await expect(page.locator('#comment-form')).toHaveCount(0);await expect(page.locator('.conversation')).toContainText('closed to new comments');
 });

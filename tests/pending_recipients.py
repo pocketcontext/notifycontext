@@ -45,10 +45,14 @@ def main():
         assert publish(mixed)['id']==n['id']  # Canonical payload survives identity creation.
         exchange('future@example.com',verified=False,expected=(400,403));assert not query(req,'SELECT * FROM notifications',ft)
         exchange('future@example.com',hd='outside.com',expected=(400,403));assert not query(req,'SELECT * FROM notifications',ft)
+        shared=req('POST',path('notification_comments'),dict(notification=n['id'],body_markdown='Before claim shared history',submission_key='before-claim'),at)
         auth=exchange('FUTURE@example.com');assert auth['record']['id']==future['id']
         claimed=recipients(n,auth['token'])[0]
         assert claimed['id']==pending['id'] and claimed['recipient']==future['id'] and claimed['claimed_at'] and not claimed['claim_expires_at'] and claimed['revision']==2
         assert publish(mixed)['id']==n['id']
+        conversation=query(req,"SELECT * FROM notification_conversation_state WHERE notification='"+n['id']+"'",auth['token'])[0]
+        assert conversation['latest_comment']==shared['id'] and not conversation['read_at'] and not conversation['archived_at']
+        assert query(req,"SELECT * FROM notification_comments WHERE notification='"+n['id']+"'",auth['token'])[0]['id']==shared['id']
         count=len(query(req,'SELECT * FROM notification_events',auth['token']));exchange('future@example.com');assert len(query(req,'SELECT * FROM notification_events',auth['token']))==count
         assert len(query(req,"SELECT * FROM notification_events WHERE event_type='claimed'",bt))==0
         assert not claimed['read_at'] and not claimed['acknowledged_at']

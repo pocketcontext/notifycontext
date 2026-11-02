@@ -1,6 +1,96 @@
 {
   "tables": [
     {
+      "name": "notification_comments",
+      "columns": [
+        {
+          "name": "author",
+          "type": "TEXT"
+        },
+        {
+          "name": "body_markdown",
+          "type": "TEXT"
+        },
+        {
+          "name": "created",
+          "type": "TEXT"
+        },
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "notification",
+          "type": "TEXT"
+        },
+        {
+          "name": "sequence",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "submission_key",
+          "type": "TEXT"
+        },
+        {
+          "name": "updated",
+          "type": "TEXT"
+        }
+      ]
+    },
+    {
+      "name": "notification_conversation_state",
+      "columns": [
+        {
+          "name": "activity_version",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "archived_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "created",
+          "type": "TEXT"
+        },
+        {
+          "name": "id",
+          "type": "TEXT"
+        },
+        {
+          "name": "latest_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "latest_comment",
+          "type": "TEXT"
+        },
+        {
+          "name": "notification",
+          "type": "TEXT"
+        },
+        {
+          "name": "read_at",
+          "type": "TEXT"
+        },
+        {
+          "name": "read_version",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "revision",
+          "type": "NUMERIC"
+        },
+        {
+          "name": "updated",
+          "type": "TEXT"
+        },
+        {
+          "name": "user",
+          "type": "TEXT"
+        }
+      ]
+    },
+    {
       "name": "notification_events",
       "columns": [
         {

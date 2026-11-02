@@ -92,6 +92,30 @@
       "revision",
       "created",
       "updated"
+    ],
+    "notification_comments": [
+      "id",
+      "notification",
+      "author",
+      "body_markdown",
+      "submission_key",
+      "sequence",
+      "created",
+      "updated"
+    ],
+    "notification_conversation_state": [
+      "id",
+      "notification",
+      "user",
+      "latest_comment",
+      "latest_at",
+      "activity_version",
+      "read_version",
+      "read_at",
+      "archived_at",
+      "revision",
+      "created",
+      "updated"
     ]
   },
   "timeoutMs": 2000,
@@ -106,7 +130,9 @@
       "notification_events": "EXISTS (SELECT 1 FROM notifications n WHERE n.id = notification_events.notification AND (n.sender = :requester OR ((n.sender = :requester OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.notification = n.id AND r.recipient = :requester)) AND (notification_events.notification_recipient = '' OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.id = notification_events.notification_recipient AND r.recipient = :requester)))))",
       "user_status": "1 = 1",
       "notification_preferences": "user = :requester",
-      "notification_feedback": "user = :requester"
+      "notification_feedback": "user = :requester",
+      "notification_comments": "EXISTS (SELECT 1 FROM notifications n WHERE n.id = notification_comments.notification AND (n.sender = :requester OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.notification = n.id AND r.recipient = :requester)))",
+      "notification_conversation_state": "user = :requester"
     },
     "timeoutMs": 5000,
     "maxRows": 100000,

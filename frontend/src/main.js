@@ -5,6 +5,8 @@ import './style.css';
 
 const state = {view:'inbox', filter:'all', search:'', page:0, list:[], directory:[], statuses:[], directoryAt:0, preferences:null, latest:null, lastPoll:0, connected:false, selected:null};
 let searchOpen=false;
+const commentDrafts=new Map(),expandedComments=new Map();
+let detailGeneration=0;
 const filterOptions=[['unread','Unread'],['awaiting','Awaiting acknowledgement'],['overdue','Past response deadline']];
 function filterMenu(view){return `<div class="view-filters" data-for="${view}" hidden>${filterOptions.map(([value,label])=>`<button type="button" class="view-filter" data-filter="${value}">${label}</button>`).join('')}</div>`;}
 const pageSize=30;
@@ -169,7 +171,7 @@ async function query(sql) {
 }
 function login() {
   // The cooldown deadline describes the server's per-IP limit, not the account, so it survives sign-out.
-  clearInterval(timer);clearTimeout(searchTimer);clearTimeout(refreshTimer);clearTimeout(cooldownTimer);cooldownTimer=undefined;refreshAt=Infinity;sessionEpoch++;listGeneration++;refreshBusy=false;queued?.waiters.forEach(resolve=>resolve());queued=null;lastRefresh=0;detailRetry=null;realtimeStarted=false;realtimeGeneration++;updateTabIndicator(0);searchOpen=false;Object.assign(state,{view:'inbox',filter:'all',search:'',page:0,list:[],directory:[],statuses:[],directoryAt:0,preferences:null,latest:null,lastPoll:0,connected:false,selected:null,pendingAlerts:new Map()});
+  commentDrafts.clear();expandedComments.clear();detailGeneration++;clearInterval(timer);clearTimeout(searchTimer);clearTimeout(refreshTimer);clearTimeout(cooldownTimer);cooldownTimer=undefined;refreshAt=Infinity;sessionEpoch++;listGeneration++;refreshBusy=false;queued?.waiters.forEach(resolve=>resolve());queued=null;lastRefresh=0;detailRetry=null;realtimeStarted=false;realtimeGeneration++;updateTabIndicator(0);searchOpen=false;Object.assign(state,{view:'inbox',filter:'all',search:'',page:0,list:[],directory:[],statuses:[],directoryAt:0,preferences:null,latest:null,lastPoll:0,connected:false,selected:null,pendingAlerts:new Map()});
   $('#app').innerHTML=`<main class="login"><div class="brand"><span class="brand-mark">N</span> NotifyContext</div><section class="login-card"><p class="eyebrow">KEEP WORK MOVING</p><h1>A clear place for<br>your next handoff.</h1><p class="muted">Updates, requests and acknowledgements.<br>For every kind of work.</p><button class="primary wide" id="google">Continue with Google</button><p class="fine">Use your organization's Google Workspace account.</p><details><summary>Local test sign-in</summary><form id="login-form"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="secondary wide">Sign in</button></form></details><div id="notice" class="notice" role="status" hidden></div></section><p class="login-foot">Your attention, thoughtfully organized.</p></main>`;
   $('#google').onclick=async()=>{try {await signIn(null,null,true);}catch(error){report(friendly(error),true);}};
   $('#login-form').onsubmit=async event=>{event.preventDefault(); const data=new FormData(event.target);try {await signIn(data.get('email'),data.get('password'));}catch(error){report(friendly(error),true);}};
@@ -219,18 +221,19 @@ async function directory() {
 }
 const directoryDue=()=>{const age=Date.now()-state.directoryAt;return age>directoryMaxAge || (age>directoryUnknownAge && state.list.some(item=>!state.directory.some(user=>user.id===item.sender)));};
 const visibleNote="(n.withdrawn_at='' OR n.withdrawn_at IS NULL)";
-const listKeys=['id','sender','subject','excerpt','kind','ack_required','withdrawn_at','created','recipient_record','read_at','acknowledged_at','archived_at','recipient_revision','feedback_record','commenter'];
-// Both inbox branches have one row per notification. A sender who also addressed themselves
-// uses the feedback row once a colleague comments; their own recipient actions remain in detail.
+const listKeys=['id','sender','subject','excerpt','kind','ack_required','withdrawn_at','created','recipient_record','read_at','acknowledged_at','archived_at','recipient_revision','feedback_record','commenter','conversation_record','activity_version'];
+// One personal state per notification combines delivery, private acknowledgement feedback,
+// and shared conversation activity without duplicating inbox rows.
 function inboxRows() {
   const user=q(pb.authStore.record.id);
-  return `SELECT n.id,n.sender,n.subject,substr(n.body_markdown,1,140) AS excerpt,n.kind,n.ack_required,n.withdrawn_at,n.created,n.due_at,n.body_markdown,
-    r.id AS recipient_record,r.read_at,r.acknowledged_at,r.archived_at,r.revision AS recipient_revision,NULL AS feedback_record,NULL AS commenter
-    FROM notifications n JOIN notification_recipients r ON r.notification=n.id AND r.recipient=${user}
-    WHERE NOT EXISTS (SELECT 1 FROM notification_feedback f WHERE f.notification=n.id AND f.user=${user})
-    UNION ALL SELECT n.id,n.sender,n.subject,substr(c.acknowledgement_markdown,1,140),n.kind,n.ack_required,n.withdrawn_at,f.latest_at,n.due_at,n.body_markdown,
-    NULL,f.read_at,NULL,f.archived_at,f.revision,f.id,c.recipient
-    FROM notification_feedback f JOIN notifications n ON n.id=f.notification JOIN notification_recipients c ON c.id=f.latest_recipient WHERE f.user=${user}`;
+  return `SELECT n.id,n.sender,n.subject,substr(COALESCE(c.body_markdown,fc.acknowledgement_markdown,n.body_markdown),1,140) AS excerpt,n.kind,n.ack_required,n.withdrawn_at,s.latest_at AS created,n.due_at,n.body_markdown,
+    r.id AS recipient_record,s.read_at,r.acknowledged_at,s.archived_at,r.revision AS recipient_revision,f.id AS feedback_record,COALESCE(c.author,fc.recipient) AS commenter,s.id AS conversation_record,s.activity_version
+    FROM notifications n JOIN notification_conversation_state s ON s.notification=n.id AND s.user=${user}
+    LEFT JOIN notification_recipients r ON r.notification=n.id AND r.recipient=${user}
+    LEFT JOIN notification_feedback f ON f.notification=n.id AND f.user=${user}
+    LEFT JOIN notification_comments c ON c.id=s.latest_comment
+    LEFT JOIN notification_recipients fc ON fc.id=f.latest_recipient AND (s.latest_comment='' OR s.latest_comment IS NULL)
+    WHERE s.activity_version>0`;
 }
 function listSql() {
   const user=q(pb.authStore.record.id), archived=state.view==='archived';
@@ -240,29 +243,30 @@ function listSql() {
     if(['awaiting','overdue'].includes(state.filter))where+=` ${state.filter==='awaiting'?'AND n.ack_required=1':''} AND ${visibleNote} AND EXISTS (SELECT 1 FROM notification_recipients ar WHERE ar.notification=n.id AND ar.acknowledged_at='')`;
     if(state.filter==='overdue')where+=` AND n.due_at != '' AND n.due_at < ${q(new Date().toISOString().replace('T',' '))}`;
     if(state.search)where+=` AND (${searchSql()})`;
-    return `SELECT n.id,n.sender,n.subject,substr(n.body_markdown,1,140) AS excerpt,n.kind,n.ack_required,n.withdrawn_at,n.created,NULL AS recipient_record,NULL AS read_at,NULL AS acknowledged_at,NULL AS archived_at,NULL AS recipient_revision,NULL AS feedback_record,NULL AS commenter FROM notifications n WHERE ${where} ORDER BY n.created DESC,n.id DESC LIMIT ${pageSize+1} OFFSET ${state.page*pageSize}`;
+    return `SELECT n.id,n.sender,n.subject,substr(n.body_markdown,1,140) AS excerpt,n.kind,n.ack_required,n.withdrawn_at,n.created,NULL AS recipient_record,NULL AS read_at,NULL AS acknowledged_at,NULL AS archived_at,NULL AS recipient_revision,NULL AS feedback_record,NULL AS commenter,NULL AS conversation_record,NULL AS activity_version FROM notifications n WHERE ${where} ORDER BY n.created DESC,n.id DESC LIMIT ${pageSize+1} OFFSET ${state.page*pageSize}`;
   }
   let where=archived?"r.archived_at != ''":"(r.archived_at = '' OR r.archived_at IS NULL)";
   // Withdrawn records remain available by direct link and in Sent, never in active inbox counts.
   if(!archived)where+=` AND ${visibleNote}`;
   if(state.filter==='unread')where+=" AND (r.read_at='' OR r.read_at IS NULL)";
-  if(['awaiting','overdue'].includes(state.filter))where+=` AND r.feedback_record IS NULL ${state.filter==='awaiting'?'AND n.ack_required=1':''} AND ${visibleNote} AND (r.acknowledged_at='' OR r.acknowledged_at IS NULL)`;
+  if(['awaiting','overdue'].includes(state.filter))where+=` AND r.recipient_record IS NOT NULL ${state.filter==='awaiting'?'AND n.ack_required=1':''} AND ${visibleNote} AND (r.acknowledged_at='' OR r.acknowledged_at IS NULL)`;
   if(state.filter==='overdue')where+=` AND n.due_at != '' AND n.due_at < ${q(new Date().toISOString().replace('T',' '))}`;
   if(state.search)where+=` AND (${searchSql()})`;
   return `SELECT ${listKeys.map(k=>'r.'+k).join(',')} FROM (${inboxRows()}) r JOIN notifications n ON n.id=r.id WHERE ${where} ORDER BY r.created DESC,r.id DESC LIMIT ${pageSize+1} OFFSET ${state.page*pageSize}`;
 }
 function searchSql(){
   const term=q(state.search);
-  return `n.id=${term} OR instr(lower(n.subject),lower(${term}))>0 OR instr(lower(n.body_markdown),lower(${term}))>0 OR EXISTS (SELECT 1 FROM notification_recipients sc WHERE sc.notification=n.id AND instr(lower(sc.acknowledgement_markdown),lower(${term}))>0)`;
+  return `n.id=${term} OR instr(lower(n.subject),lower(${term}))>0 OR instr(lower(n.body_markdown),lower(${term}))>0 OR EXISTS (SELECT 1 FROM notification_recipients sc WHERE sc.notification=n.id AND instr(lower(sc.acknowledgement_markdown),lower(${term}))>0) OR EXISTS (SELECT 1 FROM notification_comments cc WHERE cc.notification=n.id AND instr(lower(cc.body_markdown),lower(${term}))>0)`;
 }
 // One request per ordinary refresh: the current page (31st row probes for more) plus view-independent
 // unread total, latest 100 inbox IDs for alerts and the owner's preferences, even when the page is empty.
 async function inbox() {
   const user=q(pb.authStore.record.id),list=listSql(),prefs='SELECT id, alerts_paused_until, revision FROM notification_preferences LIMIT 1';
-  const latest=`SELECT r.id, r.created, CASE WHEN r.feedback_record IS NULL THEN r.id ELSE r.id || ':' || f.activity_version END AS activity_key FROM (${inboxRows()}) r LEFT JOIN notification_feedback f ON f.id=r.feedback_record WHERE r.withdrawn_at='' AND r.archived_at='' ORDER BY r.created DESC,r.id DESC LIMIT 100`;
+  const latest=`SELECT r.id, r.created, r.id || ':' || r.activity_version AS activity_key FROM (${inboxRows()}) r WHERE r.withdrawn_at='' AND r.archived_at='' ORDER BY r.created DESC,r.id DESC LIMIT 100`;
   const unread=`SELECT count(*) AS total FROM (${inboxRows()}) r WHERE r.read_at='' AND r.archived_at='' AND r.withdrawn_at=''`;
-  const [row]=await aggregate(`WITH page(${listKeys.join(', ')}) AS (${list}), latest(id, created, activity_key) AS (${latest}) SELECT (${unread}) AS unread, (SELECT json_group_array(json_object('id',id,'created',created,'activity_key',activity_key) ORDER BY created DESC, id DESC) FROM latest) AS latest, (SELECT json_group_array(json_object(${pairs(listKeys)}) ORDER BY created DESC, id DESC) FROM page) AS list, (SELECT json_object('id',id,'alerts_paused_until',alerts_paused_until,'revision',revision) FROM (${prefs})) AS preferences`) || [];
-  if(row)return {unread:Number(row.unread)||0,latest:JSON.parse(row.latest),list:JSON.parse(row.list),preferences:row.preferences?JSON.parse(row.preferences):null};
+  const selected=state.selected?`(SELECT s.revision || ':' || (SELECT n.revision FROM notifications n WHERE n.id=s.notification) || ':' || (SELECT count(*) FROM notification_comments c WHERE c.notification=s.notification) FROM notification_conversation_state s WHERE s.notification=${q(state.selected)})`:'NULL';
+  const [row]=await aggregate(`WITH page(${listKeys.join(', ')}) AS (${list}), latest(id, created, activity_key) AS (${latest}) SELECT ${selected} AS selected_version, (${unread}) AS unread, (SELECT json_group_array(json_object('id',id,'created',created,'activity_key',activity_key) ORDER BY created DESC, id DESC) FROM latest) AS latest, (SELECT json_group_array(json_object(${pairs(listKeys)}) ORDER BY created DESC, id DESC) FROM page) AS list, (SELECT json_object('id',id,'alerts_paused_until',alerts_paused_until,'revision',revision) FROM (${prefs})) AS preferences`) || [];
+  if(row)return {selectedVersion:row.selected_version,unread:Number(row.unread)||0,latest:JSON.parse(row.latest),list:JSON.parse(row.list),preferences:row.preferences?JSON.parse(row.preferences):null};
   // Bounded fallback for an oversized envelope: separate reads, the list paged by query()'s splitter.
   const records=await query(latest),total=await query(unread),preferences=await query(prefs);
   return {unread:Number(total[0]?.total)||0,latest:records,preferences:preferences[0] || null,list:await query(list)};
@@ -273,7 +277,7 @@ function renderList(batch) {
   const hasMore=batch.length>pageSize,pager=$('#pagination');
   if(pager)pager.hidden=state.page===0 && !hasMore;
   $('#previous').disabled=state.page===0;$('#next').disabled=!hasMore;$('#page-label').textContent=`Page ${state.page+1}`;
-  $('#list').innerHTML=state.list.length?state.list.map(item=>`<button class="notification-row ${!item.read_at && state.view!=='sent'?'unread':''} ${state.selected===item.id?'selected':''}" data-id="${e(item.id)}"><div class="row-top"><span class="sender">${e(name(item.commenter || item.sender))}${item.feedback_record?' replied':''}</span><time>${e(date(item.created))}</time></div><h2>${e(item.subject)}</h2><p class="excerpt">${e(item.excerpt)}</p><div class="row-bottom"><span class="badge ${e(item.kind)}">${e(kindLabel(item.kind))}</span>${item.feedback_record?'<span class="state-label">Comment on your notification</span>':''}${item.withdrawn_at?'<span class="state-label">Withdrawn</span>':item.acknowledged_at?'<span class="state-label">✓ Acknowledged</span>':item.ack_required && !item.feedback_record?'<span class="state-label">Acknowledgement requested</span>':''}</div></button>`).join(''):`<div class="empty"><span class="empty-icon">✓</span><h2>${state.search || state.filter!=='all'?'No matching notifications':'You’re all caught up'}</h2><p>${state.search || state.filter!=='all'?'Try another search or filter.':'New updates and requests will appear here.'}</p></div>`;
+  $('#list').innerHTML=state.list.length?state.list.map(item=>`<button class="notification-row ${!item.read_at && state.view!=='sent'?'unread':''} ${state.selected===item.id?'selected':''}" data-id="${e(item.id)}"><div class="row-top"><span class="sender">${e(name(item.commenter || item.sender))}${item.commenter?' replied':''}</span><time>${e(date(item.created))}</time></div><h2>${e(item.subject)}</h2><p class="excerpt">${e(item.excerpt)}</p><div class="row-bottom"><span class="badge ${e(item.kind)}">${e(kindLabel(item.kind))}</span>${item.commenter?'<span class="state-label">New discussion activity</span>':''}${item.withdrawn_at?'<span class="state-label">Withdrawn</span>':item.acknowledged_at?'<span class="state-label">✓ Acknowledged</span>':item.ack_required && !item.feedback_record?'<span class="state-label">Acknowledgement requested</span>':''}</div></button>`).join(''):`<div class="empty"><span class="empty-icon">✓</span><h2>${state.search || state.filter!=='all'?'No matching notifications':'You’re all caught up'}</h2><p>${state.search || state.filter!=='all'?'Try another search or filter.':'New updates and requests will appear here.'}</p></div>`;
   all('.notification-row').forEach(button=>button.onclick=()=>openDetail(button.dataset.id));
 }
 // Run only through runRefresh(), which serializes refreshes.
@@ -284,7 +288,7 @@ async function poll(manual=false, visible=false) {
     await refreshSession();
     if(epoch!==sessionEpoch)return;
     if(directoryDue()){await directory();if(epoch!==sessionEpoch)return;}
-    const {latest,unread,preferences,list}=await inbox();
+    const {latest,unread,preferences,list,selectedVersion}=await inbox();
     if(epoch!==sessionEpoch)return;
     state.preferences=preferences;
     const incoming=state.latest===null?[]:latest.filter(item=>!state.latest.has(item.activity_key || item.id) && parseDate(item.created).getTime()>=state.lastPoll-15000);
@@ -302,6 +306,8 @@ async function poll(manual=false, visible=false) {
     if(generation===listGeneration)renderList(list);
     const box=$('#notice');if(box && (manual || box.dataset.busy))box.hidden=true;
     retryDetail(epoch);
+    const panel=$('#detail');
+    if(selectedVersion!=null && panel?.dataset.id===state.selected && panel.dataset.version!==String(selectedVersion))void openDetail(state.selected,true);
   } catch(error) {
     if(epoch!==sessionEpoch){if(!pb.authStore.isValid)report(friendly(error),true);return;}
     state.connected=false;$('#connection').textContent=error.busy?'○ Server busy · retrying shortly':'○ Connection interrupted · retrying';$('#connection').classList.add('offline');
@@ -336,28 +342,39 @@ const recipientKeys=['id','recipient','recipient_name','addressed_email','claime
 const final=message=>Object.assign(new Error(message),{final:true});
 // One request: the notification plus separately aggregated recipients and references (no cross product).
 // The requester's snapshot filters both: a sender sees every recipient, a recipient only their own row.
-async function loadDetail(id) {
-  const note=`SELECT (SELECT json_object('id',f.id,'read_at',f.read_at,'archived_at',f.archived_at,'revision',f.revision,'latest_recipient',f.latest_recipient,'latest_at',f.latest_at) FROM notification_feedback f WHERE f.notification=n.id) AS feedback, n.id, n.sender, n.subject, n.body_markdown, n.kind, n.ack_required, n.due_at, n.withdrawn_at, n.withdrawal_reason, n.revision, n.created, (SELECT count(*) FROM notification_recipients WHERE notification=n.id) AS recipient_total, (SELECT count(*) FROM notification_references WHERE notification=n.id) AS reference_total`;
+async function loadDetail(id,preserve=false) {
+  const note=`SELECT (SELECT count(*) FROM notification_comments c WHERE c.notification=n.id) AS comment_total, (SELECT json_object('id',s.id,'read_at',s.read_at,'archived_at',s.archived_at,'revision',s.revision,'activity_version',s.activity_version) FROM notification_conversation_state s WHERE s.notification=n.id) AS conversation, (SELECT json_object('id',f.id,'read_at',f.read_at,'archived_at',f.archived_at,'revision',f.revision,'latest_recipient',f.latest_recipient,'latest_at',f.latest_at) FROM notification_feedback f WHERE f.notification=n.id) AS feedback, n.id, n.sender, n.subject, n.body_markdown, n.kind, n.ack_required, n.due_at, n.withdrawn_at, n.withdrawal_reason, n.revision, n.created, (SELECT count(*) FROM notification_recipients WHERE notification=n.id) AS recipient_total, (SELECT count(*) FROM notification_references WHERE notification=n.id) AS reference_total`;
   const recipients=`SELECT r.id, r.recipient, d.name AS recipient_name, r.addressed_email, r.claimed_at, r.claim_expires_at, r.read_at, r.acknowledged_at, r.archived_at, r.acknowledgement_markdown, r.revision, r.created FROM notification_recipients r LEFT JOIN user_directory d ON d.id=r.recipient WHERE r.notification=${q(id)}`;
   const references=`SELECT id, kind, label, url, created FROM notification_references WHERE notification=${q(id)}`;
-  const found=await aggregate(`${note}, (SELECT json_group_array(json_object(${pairs(recipientKeys)}) ORDER BY created, id) FROM (${recipients})) AS recipients, (SELECT json_group_array(json_object(${pairs(referenceKeys)}) ORDER BY created, id) FROM (${references})) AS refs FROM notifications n WHERE n.id=${q(id)} LIMIT 1`);
+  const comments=commentSql(id);
+  const found=await aggregate(`${note}, (SELECT json_group_array(json_object('id',id,'author',author,'body_markdown',body_markdown,'sequence',sequence,'created',created) ORDER BY sequence DESC) FROM (${comments})) AS comments, (SELECT json_group_array(json_object(${pairs(recipientKeys)}) ORDER BY created, id) FROM (${recipients})) AS recipients, (SELECT json_group_array(json_object(${pairs(referenceKeys)}) ORDER BY created, id) FROM (${references})) AS refs FROM notifications n WHERE n.id=${q(id)} LIMIT 1`);
   let detail;
-  if(found){if(!found[0])return null;const {recipients:people,refs,...notification}=found[0];detail={notification,recipients:JSON.parse(people),references:JSON.parse(refs)};}
+  if(found){if(!found[0])return null;const {recipients:people,refs,comments:thread,...notification}=found[0];detail={notification,recipients:JSON.parse(people),references:JSON.parse(refs),comments:thread?JSON.parse(thread):[]};}
   else {
     // Oversized aggregates (for example 100 long multibyte acknowledgements): separate bounded reads.
     const [notification]=await query(`${note} FROM notifications n WHERE n.id=${q(id)} LIMIT 1`);
     if(!notification)return null;
-    detail={notification,recipients:await query(`${recipients} ORDER BY r.created, r.id LIMIT 100`),references:await query(`${references} ORDER BY created, id LIMIT 30`)};
+    detail={notification,recipients:await query(`${recipients} ORDER BY r.created, r.id LIMIT 100`),references:await query(`${references} ORDER BY created, id LIMIT 30`),comments:await query(comments)};
   }
   if(detail.recipients.length!==Number(detail.notification.recipient_total) || detail.references.length!==Number(detail.notification.reference_total))throw final('Recipient details are incomplete. Reload to try again.');
+  const oldest=preserve?expandedComments.get(id):null;
+  if(oldest){
+    let displayed=detail.comments.slice(0,commentPageSize),hasEarlier=detail.comments.length>commentPageSize;
+    while(hasEarlier && displayed.at(-1)?.sequence>oldest){
+      const batch=await query(commentSql(id,displayed.at(-1).sequence));
+      displayed.push(...batch.slice(0,commentPageSize));hasEarlier=batch.length>commentPageSize;
+    }
+    detail.comments=displayed;detail.hasEarlier=hasEarlier;
+  }
   return detail;
 }
-function actionControl(record,notification,feedback=false){
+function actionControl(record,notification,feedback=false,ackOnly=false){
   const prefix=feedback?'feedback':'message',attribute=feedback?'data-feedback-action':'data-action';
   const individual=[];
   if(!feedback && !record.acknowledged_at && !notification.withdrawn_at)individual.push(['acknowledge','Acknowledge']);
-  if(!record.read_at)individual.push(['read',feedback?'Mark comments read':'Mark read']);
-  individual.push([record.archived_at?'unarchive':'archive',record.archived_at?(feedback?'Move comments to inbox':'Move to inbox'):(feedback?'Archive comments':'Archive')]);
+  if(!ackOnly && !record.read_at)individual.push(['read',feedback?'Mark comments read':'Mark read']);
+  if(!ackOnly)individual.push([record.archived_at?'unarchive':'archive',record.archived_at?(feedback?'Move comments to inbox':'Move to inbox'):(feedback?'Archive comments':'Archive')]);
+  if(!individual.length)return '';
   const primary=!record.archived_at && individual.some(([action])=>action==='acknowledge')?['acknowledge_archive','Acknowledge & archive']:
     !record.archived_at && !record.read_at?['read_archive',feedback?'Read & archive comments':'Read & archive']:individual[0];
   const choices=individual.filter(([action])=>action!==primary[0]),hint=primary[0]==='acknowledge_archive'?'Saves your note, acknowledges, marks read and archives.':primary[0]==='read_archive'?(feedback?'Marks current comments read and archives them.':'Marks this message read and archives it.'):'';
@@ -382,19 +399,83 @@ function bindActionMenus(){
     });
   });
 }
-async function openDetail(id) {
-  const epoch=sessionEpoch;
+const commentPageSize=30;
+function commentSql(id,before=0){
+  return `SELECT id,author,body_markdown,sequence,created FROM notification_comments WHERE notification=${q(id)}${before?` AND sequence<${Number(before)}`:''} ORDER BY sequence DESC LIMIT ${commentPageSize+1}`;
+}
+function commentMarkup(comment){
+  return `<article class="conversation-comment" data-comment-id="${e(comment.id)}"><header><strong>${e(name(comment.author))}</strong><time>${e(date(comment.created))}</time></header><div class="markdown">${markdown(comment.body_markdown)}</div></article>`;
+}
+function conversationSection(notification,conversation,comments,hasEarlier){
+  const draft=commentDrafts.get(notification.id);
+  return `<section class="conversation" aria-labelledby="conversation-heading"><h3 id="conversation-heading">Conversation</h3><p class="fine">Shared with the sender and all recipients, including recipients who claim this notification later. Comments are permanent and do not acknowledge the notification.</p><button type="button" class="text-button" id="more-comments" ${!hasEarlier?'hidden':''}>Load earlier comments</button><div id="conversation-comments">${comments.slice().reverse().map(commentMarkup).join('') || '<p class="muted conversation-empty">No shared comments yet.</p>'}</div>${conversation?.activity_version>0?`<div class="conversation-triage">${!conversation.read_at?'<button type="button" class="secondary" data-conversation-action="read">Mark conversation read</button>':''}<button type="button" class="secondary" data-conversation-action="${conversation.archived_at?'unarchive':'archive'}">${conversation.archived_at?'Move conversation to inbox':'Archive conversation'}</button>${!conversation.read_at && !conversation.archived_at?'<button type="button" class="secondary" data-conversation-action="read_archive">Read & archive conversation</button>':''}</div>`:''}${notification.withdrawn_at?'<p class="fine">This notification was withdrawn. The conversation is retained and closed to new comments.</p>':`<form id="comment-form"><label for="comment-body">Add a comment <span class="optional">Markdown supported</span></label><textarea id="comment-body" maxlength="4000" rows="3" required ${draft?.posting?'disabled':''}>${e(draft?.text||'')}</textarea><details><summary>Preview comment</summary><div class="markdown" id="comment-preview">${markdown(draft?.text||'')}</div></details><p class="form-error" id="comment-error" role="alert"></p><button class="primary" type="submit" ${draft?.posting?'disabled':''}>Post comment</button></form>`}</section>`;
+}
+function bindConversation(notification,conversation,comments,epoch,generation){
+  const id=notification.id,current=()=>epoch===sessionEpoch && generation===detailGeneration && state.selected===id;
+  let shown=comments.slice().reverse();
+  $('#more-comments').onclick=async()=>{
+    const button=$('#more-comments');button.disabled=true;
+    try{
+      const batch=await query(commentSql(id,shown[0]?.sequence||0));
+      if(!current())return;
+      const page=batch.slice(0,commentPageSize).reverse();shown.unshift(...page);expandedComments.set(id,shown[0]?.sequence);
+      $('#conversation-comments').insertAdjacentHTML('afterbegin',page.map(commentMarkup).join(''));
+      button.hidden=batch.length<=commentPageSize;
+    }catch(error){if(current())report(friendly(error),true);}finally{if(current())button.disabled=false;}
+  };
+  all('[data-conversation-action]').forEach(button=>button.onclick=async()=>{
+    all('[data-conversation-action]').forEach(item=>{item.disabled=true;});
+    try{
+      await pb.collection('notification_conversation_state').update(conversation.id,{expected_revision:conversation.revision,action:button.dataset.conversationAction});
+      if(epoch!==sessionEpoch)return;
+      await requestRefresh({urgent:true});if(state.selected===id)await openDetail(id,true);
+    }catch(error){
+      if(epoch!==sessionEpoch)return;
+      if(state.selected===id)await openDetail(id,true);
+      report(error.status===409?'New activity arrived. Review the conversation before trying again.':friendly(error),true);
+    }
+  });
+  const form=$('#comment-form');if(!form)return;
+  const draft=commentDrafts.get(id)||{text:'',key:'',submitted:'',posting:false};commentDrafts.set(id,draft);
+  $('#comment-body').oninput=event=>{draft.text=event.target.value;$('#comment-preview').innerHTML=markdown(draft.text);};
+  form.onsubmit=async event=>{
+    event.preventDefault();if(draft.posting)return;
+    const body=draft.text;if(!body.trim()){$('#comment-error').textContent='Write a comment before posting.';return;}
+    // An uncertain response keeps the same key for the same payload. Only an explicit
+    // later submission with different text gets a new identity; writes are never retried automatically.
+    if(!draft.key || draft.submitted!==body){draft.key=crypto.randomUUID();draft.submitted=body;}
+    draft.posting=true;form.querySelectorAll('textarea,button').forEach(control=>{control.disabled=true;});$('#comment-error').textContent='';
+    try{
+      await pb.collection('notification_comments').create({notification:id,body_markdown:body,submission_key:draft.key});
+      if(epoch!==sessionEpoch)return;
+      draft.text='';draft.key='';draft.submitted='';draft.posting=false;
+      await requestRefresh({urgent:true});if(state.selected===id)await openDetail(id,true);
+    }catch(error){if(epoch===sessionEpoch && state.selected===id && $('#comment-error'))$('#comment-error').textContent=friendly(error);}
+    finally{draft.posting=false;if(epoch===sessionEpoch && state.selected===id)$('#comment-form')?.querySelectorAll('textarea,button').forEach(control=>{control.disabled=false;});}
+  };
+}
+async function openDetail(id, preserve=false) {
+  const epoch=sessionEpoch,generation=++detailGeneration;
+  const previousScroll=preserve?$('#detail')?.scrollTop||0:0;
+  const focused=preserve && ['comment-body','ack-note'].includes(document.activeElement?.id)?{id:document.activeElement.id,start:document.activeElement.selectionStart,end:document.activeElement.selectionEnd}:null;
   state.selected=id;saveRoute();
-  const panel=$('#detail');panel.scrollTop=0;panel.classList.add('open');panel.dataset.id='';panel.innerHTML='<p class="loading">Loading notification…</p>';
+  const panel=$('#detail');panel.scrollTop=0;panel.classList.add('open');panel.dataset.id='';if(!preserve)panel.innerHTML='<p class="loading">Loading notification…</p>';
   try {
-    const detail=await loadDetail(id);
-    if(epoch!==sessionEpoch || state.selected!==id)return;
+    const detail=await loadDetail(id,preserve);
+    if(epoch!==sessionEpoch || generation!==detailGeneration || state.selected!==id)return;
     if(!detail)throw final('This notification is no longer available.');
     const {notification,recipients,references}=detail;
+    const hasEarlier=detail.hasEarlier??detail.comments.length>commentPageSize;
+    if(detail.hasEarlier===undefined)detail.comments=detail.comments.slice(0,commentPageSize);
+    if(!preserve)expandedComments.delete(id);
     const feedback=notification.feedback?JSON.parse(notification.feedback):null;
+    const conversation=notification.conversation?JSON.parse(notification.conversation):null;
     if(detailRetry?.id===id)detailRetry=null;
     const mine=recipients.find(r=>r.recipient===pb.authStore.record.id),sender=notification.sender===pb.authStore.record.id;
-    panel.innerHTML=`<button class="text-button mobile-back" id="back">← Back to inbox</button><div class="detail-meta"><span class="badge ${e(notification.kind)}">${e(kindLabel(notification.kind))}</span><time>${e(date(notification.created))}</time></div><button class="text-button" id="copy-record">Copy record link</button><h2 class="detail-title">${e(notification.subject)}</h2><div class="author"><span class="avatar">${e(name(notification.sender).slice(0,1))}</span><div><strong>${e(name(notification.sender))}</strong><small>${e(statusDescription(notification.sender))}</small></div></div>${notification.withdrawn_at?`<div class="notice error">Withdrawn: ${e(notification.withdrawal_reason)}</div>`:''}${notification.due_at?`<p class="deadline">Response requested by ${e(date(notification.due_at))}</p>`:''}<article class="markdown">${markdown(notification.body_markdown)}</article>${references.length?`<section class="references"><h3>Related context</h3>${references.map(ref=>`<a href="${e(/^https?:\/\//i.test(ref.url)?ref.url:'#')}" target="_blank" rel="noopener noreferrer">${e(ref.label || ref.url)} <span aria-hidden="true">↗</span></a>`).join('')}</section>`:''}${mine?`<section class="actions"><p class="muted">${mine.acknowledged_at?`Acknowledged ${e(date(mine.acknowledged_at))}`:notification.ack_required?'Your acknowledgement is requested.':'Acknowledge to let the sender know you received this.'}</p>${mine.acknowledgement_markdown?`<div class="markdown acknowledgement">${markdown(mine.acknowledgement_markdown)}</div>`:''}${!mine.acknowledged_at && !notification.withdrawn_at?'<label>Optional acknowledgement note<textarea id="ack-note" maxlength="4000" rows="2" placeholder="Received. I’ll review this tomorrow."></textarea></label>':''}${actionControl(mine,notification)}<p class="fine">Acknowledgement confirms receipt, not completion of the work.</p></section>`:''}${feedback?`<section class="actions feedback-actions"><h3>Comments on your notification</h3><p>${feedback.read_at?'Comments marked read':'New comment'} · ${e(date(feedback.latest_at))}</p><div class="markdown">${markdown(recipients.find(r=>r.id===feedback.latest_recipient)?.acknowledgement_markdown || '')}</div>${actionControl(feedback,notification,true)}</section>`:''}${sender?`<section class="recipient-status"><h3>Recipient status</h3>${recipients.map(r=>recipientSummary(r,notification)).join('')}${!notification.withdrawn_at?'<button class="text-button danger" id="withdraw">Withdraw notification</button>':''}</section>`:''}`;
+    panel.innerHTML=`<button class="text-button mobile-back" id="back">← Back to inbox</button><div class="detail-meta"><span class="badge ${e(notification.kind)}">${e(kindLabel(notification.kind))}</span><time>${e(date(notification.created))}</time></div><button class="text-button" id="copy-record">Copy record link</button><h2 class="detail-title">${e(notification.subject)}</h2><div class="author"><span class="avatar">${e(name(notification.sender).slice(0,1))}</span><div><strong>${e(name(notification.sender))}</strong><small>${e(statusDescription(notification.sender))}</small></div></div>${notification.withdrawn_at?`<div class="notice error">Withdrawn: ${e(notification.withdrawal_reason)}</div>`:''}${notification.due_at?`<p class="deadline">Response requested by ${e(date(notification.due_at))}</p>`:''}<article class="markdown">${markdown(notification.body_markdown)}</article>${references.length?`<section class="references"><h3>Related context</h3>${references.map(ref=>`<a href="${e(/^https?:\/\//i.test(ref.url)?ref.url:'#')}" target="_blank" rel="noopener noreferrer">${e(ref.label || ref.url)} <span aria-hidden="true">↗</span></a>`).join('')}</section>`:''}${mine?`<section class="actions"><p class="muted">${mine.acknowledged_at?`Acknowledged ${e(date(mine.acknowledged_at))}`:notification.ack_required?'Your acknowledgement is requested.':'Acknowledge to let the sender know you received this.'}</p>${mine.acknowledgement_markdown?`<div class="markdown acknowledgement">${markdown(mine.acknowledgement_markdown)}</div>`:''}${!mine.acknowledged_at && !notification.withdrawn_at?'<label>Optional acknowledgement note (private to sender)<textarea id="ack-note" maxlength="4000" rows="2" placeholder="Received. I’ll review this tomorrow."></textarea></label>':''}${actionControl(mine,notification,false,!!conversation)}<p class="fine">Acknowledgement confirms receipt, not completion of the work.</p></section>`:''}${feedback?`<section class="actions feedback-actions"><h3>Private acknowledgement notes</h3><p>${feedback.read_at?'Comments marked read':'New comment'} · ${e(date(feedback.latest_at))}</p><div class="markdown">${markdown(recipients.find(r=>r.id===feedback.latest_recipient)?.acknowledgement_markdown || '')}</div>${conversation?'':actionControl(feedback,notification,true)}</section>`:''}${conversationSection(notification,conversation,detail.comments,hasEarlier)}${sender?`<section class="recipient-status"><h3>Recipient status</h3>${recipients.map(r=>recipientSummary(r,notification)).join('')}${!notification.withdrawn_at?'<button class="text-button danger" id="withdraw">Withdraw notification</button>':''}</section>`:''}`;
+    const draft=commentDrafts.get(id)||{text:'',key:'',submitted:'',posting:false};commentDrafts.set(id,draft);
+    if($('#ack-note')){$('#ack-note').value=draft.ack||'';$('#ack-note').oninput=event=>{draft.ack=event.target.value;};}
+    bindConversation(notification,conversation,detail.comments,epoch,generation);
     bindActionMenus();
     $('#copy-record').onclick=()=>void navigator.clipboard.writeText(new URL(routeHref(id,true),location.href).href).then(()=>report('Link copied.')).catch(()=>report('Unable to copy link.',true));
     $('#back').onclick=()=>{panel.classList.remove('open');state.selected=null;saveRoute();};
@@ -405,6 +486,7 @@ async function openDetail(id) {
       try {
         await pb.collection('notification_recipients').update(mine.id,{expected_revision:mine.revision,action,...(['acknowledge','acknowledge_archive'].includes(action)?{acknowledgement_markdown:note}:{})});
         if(epoch!==sessionEpoch)return;
+        if(['acknowledge','acknowledge_archive'].includes(action))draft.ack='';
         // Own write: one urgent list refresh plus the detail re-read; the write itself is never retried.
         const refreshed=requestRefresh({urgent:true});
         if(state.selected===id){await openDetail(id);if(!['acknowledge','acknowledge_archive'].includes(action) && state.selected===id && $('#ack-note'))$('#ack-note').value=note;}
@@ -425,8 +507,8 @@ async function openDetail(id) {
     });
     if($('#withdraw'))$('#withdraw').onclick=()=>withdraw(notification);
     all('.notification-row').forEach(button=>button.classList.toggle('selected',button.dataset.id===id));
-    panel.dataset.id=id;
-  }catch(error){if(epoch!==sessionEpoch || state.selected!==id)return;if(!error.final && (error.busy || !error.status || error.status>=500 || error.status===408))detailRetry={epoch,id};panel.innerHTML=`<button class="text-button" id="error-back">← Back to inbox</button><div class="empty"><p>${e(friendly(error))}</p></div>`;$('#error-back').onclick=()=>{panel.classList.remove('open');state.selected=null;saveRoute();};}
+    panel.dataset.id=id;panel.dataset.version=conversation?`${conversation.revision}:${notification.revision}:${notification.comment_total||0}`:'';if(preserve)panel.scrollTop=previousScroll;if(focused){const control=document.getElementById(focused.id);if(control && !control.disabled){control.focus({preventScroll:true});control.setSelectionRange(focused.start,focused.end);}}
+  }catch(error){if(epoch!==sessionEpoch || generation!==detailGeneration || state.selected!==id)return;if(!error.final && (error.busy || !error.status || error.status>=500 || error.status===408))detailRetry={epoch,id};panel.innerHTML=`<button class="text-button" id="error-back">← Back to inbox</button><div class="empty"><p>${e(friendly(error))}</p></div>`;$('#error-back').onclick=()=>{panel.classList.remove('open');state.selected=null;saveRoute();};}
 }
 function dialog(content,setup) {
   const modal=$('#dialog');modal.innerHTML=`<button class="dialog-close icon-button" aria-label="Close dialog">×</button>${content}`;$('.dialog-close').onclick=()=>modal.close();modal.showModal();setup?.(modal);

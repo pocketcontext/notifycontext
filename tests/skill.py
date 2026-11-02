@@ -90,6 +90,39 @@ def main():
         assert json.loads(cli('backlog','--feedback'))['count']==0
         assert json.loads(cli('backlog','--feedback','--include-archived'))['count']==1
 
+        # Sender-only publications with no incoming activity are not archived inbox work.
+        assert json.loads(cli('backlog', '--conversations', '--include-archived'))['count'] == 1
+        # Shared repeated comments are separate from the original private acknowledgement.
+        notification_id = selected['notification_id']
+        comment_payload = {'body_markdown': 'Shared question from sender', 'submission_key': 'comment-one'}
+        shared = json.loads(cli('comment', notification_id, json.dumps(comment_payload)))
+        assert json.loads(cli('comment', notification_id, json.dumps(comment_payload)))['id'] == shared['id']
+        cli('comment', notification_id, json.dumps({**comment_payload, 'body_markdown': 'Changed'}), expected=4)
+        env['NOTIFYCONTEXT_USER_EMAIL'] = 'recipient@example.com'
+        active = json.loads(cli('backlog', '--conversations', '--unread', '--search', 'Shared question'))
+        assert active['count'] == 1 and active['complete']
+        cstate = active['items'][0]
+        original = json.loads(cli('get', 'notification_recipients', selected['recipient_record_id']))
+        cli('comment', notification_id, json.dumps({'body_markdown': 'First reply', 'submission_key': 'reply-one'}))
+        cli('comment', notification_id, json.dumps({'body_markdown': 'Second reply', 'submission_key': 'reply-two'}))
+        thread = json.loads(cli('conversation', notification_id, '--page-size', '1'))
+        assert thread['complete'] and thread['through_sequence'] == 3
+        assert [c['body_markdown'] for c in thread['items']] == ['Shared question from sender', 'First reply', 'Second reply']
+        assert all('acknowledgement_markdown' not in c for c in thread['items'])
+        assert json.loads(cli('get', 'notification_recipients', original['id'])) == original
+        assert json.loads(cli('backlog', '--conversations', '--unread', '--search', 'Shared question'))['count'] == 1
+        current = json.loads(cli('get', 'notification_conversation_state', cstate['conversation_record_id']))
+        cli('update', 'notification_conversation_state', current['id'], json.dumps({'expected_revision': current['revision'], 'action': 'read_archive'}))
+        assert json.loads(cli('backlog', '--conversations', '--search', 'Shared question'))['count'] == 0
+        env['NOTIFYCONTEXT_USER_EMAIL'] = 'sender@example.com'
+        incoming = json.loads(cli('backlog', '--conversations', '--unread', '--search', 'Second reply'))
+        assert incoming['count'] == 1
+        cli('comment', notification_id, json.dumps({'body_markdown': 'Follow-up from sender', 'submission_key': 'comment-two'}))
+        env['NOTIFYCONTEXT_USER_EMAIL'] = 'recipient@example.com'
+        assert json.loads(cli('backlog', '--conversations', '--unread', '--search', 'Follow-up'))['count'] == 1
+        assert json.loads(cli('conversation', notification_id, '--page-size', '2'))['count'] == 4
+        env['NOTIFYCONTEXT_USER_EMAIL'] = 'sender@example.com'
+
         pending_payload = dict(payload, recipients=[], recipient_emails=['NewColleague@Example.com'], submission_key='pending-one')
         pending = json.loads(cli('publish', json.dumps(pending_payload)))
         assert json.loads(cli('publish', json.dumps(pending_payload)))['id'] == pending['id']

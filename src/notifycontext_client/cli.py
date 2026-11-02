@@ -588,6 +588,8 @@ def backlog(cfg, args):
         raise Fail(2, 'page size must be 1–100')
     if (args.awaiting_signup or args.expired_signup) and not args.sent:
         raise Fail(2, '--awaiting-signup and --expired-signup require --sent')
+    if args.conversations:
+        return conversation_backlog(cfg, args, since, before)
     if args.feedback:
         return feedback_backlog(cfg, args, since, before)
     uid = identity(cfg)['id']
@@ -683,6 +685,82 @@ def feedback_backlog(cfg, args, since, before):
     return {'items':result,'count':len(result),'complete':True,'consistency':'Paginated live reads; concurrent changes may require another refresh.'}
 
 
+def conversation_backlog(cfg, args, since, before):
+    """Canonical personal inbox, one row per notification, including repeated comments."""
+    if args.feedback or args.sent or args.awaiting_ack or args.overdue or args.awaiting_signup or args.expired_signup:
+        raise Fail(2, '--conversations cannot combine with feedback, sent, acknowledgement, deadline or signup filters')
+    predicates = ['s.user = ' + literal(identity(cfg)['id']), 's.activity_version > 0']
+    if not args.include_archived: predicates.append("s.archived_at = ''")
+    if not args.include_withdrawn: predicates.append("n.withdrawn_at = ''")
+    if args.unread: predicates.append('s.read_version < s.activity_version')
+    if args.sender: predicates.append('n.sender = ' + literal(args.sender))
+    if args.kind: predicates.append('n.kind = ' + literal(args.kind))
+    if since: predicates.append('julianday(s.latest_at) >= julianday(' + literal(since) + ')')
+    if before: predicates.append('julianday(s.latest_at) < julianday(' + literal(before) + ')')
+    if args.search:
+        term = literal(args.search)
+        predicates.append(f"(n.id={term} OR instr(lower(n.subject),lower({term}))>0 OR instr(lower(n.body_markdown),lower({term}))>0 OR EXISTS (SELECT 1 FROM notification_comments c WHERE c.notification=n.id AND instr(lower(c.body_markdown),lower({term}))>0) OR EXISTS (SELECT 1 FROM notification_recipients r WHERE r.notification=n.id AND instr(lower(r.acknowledgement_markdown),lower({term}))>0))")
+    result, cursor, size = [], '', args.page_size
+    while True:
+        sql = """SELECT s.id AS conversation_record_id,s.revision AS conversation_revision,
+          s.activity_version,s.read_version,s.read_at,s.archived_at,s.latest_at,s.latest_comment,
+          n.id AS notification_id,n.subject,n.body_markdown,n.sender,n.kind,n.ack_required,n.due_at,n.withdrawn_at,
+          c.author AS commenter,d.name AS commenter_name,c.body_markdown AS latest_comment_markdown
+          FROM notification_conversation_state s JOIN notifications n ON n.id=s.notification
+          LEFT JOIN notification_comments c ON c.id=s.latest_comment
+          LEFT JOIN user_directory d ON d.id=c.author WHERE """
+        sql += ' AND '.join(predicates + ['s.id > ' + literal(cursor)]) + f' ORDER BY s.id LIMIT {size}'
+        batch, truncated = query_rows(cfg, sql)
+        if truncated:
+            if size == 1:
+                raise Fail(1, 'A conversation row exceeds the response limit. Backlog is incomplete.')
+            size = max(1, size // 2)
+            continue
+        result.extend(batch)
+        if len(batch) < size: break
+        next_cursor = batch[-1]['conversation_record_id']
+        if next_cursor <= cursor:
+            raise Fail(1, 'Conversation cursor did not advance; refusing an incomplete result')
+        cursor = next_cursor
+    return {'items': result, 'count': len(result), 'complete': True,
+            'consistency': 'Paginated live reads; concurrent changes may require another refresh.'}
+
+
+def conversation(cfg, notification, page_size):
+    """Retrieve immutable shared comments through the sequence observed at the start."""
+    if not re.fullmatch('[a-z0-9]{15}', notification):
+        raise Fail(2, 'invalid notification id')
+    if not 1 <= page_size <= 100:
+        raise Fail(2, 'page size must be 1–100')
+    rows, truncated = query_rows(cfg, "SELECT n.id, COALESCE((SELECT MAX(c.sequence) FROM notification_comments c WHERE c.notification=n.id),0) AS through_sequence FROM notifications n WHERE n.id=" + literal(notification))
+    if truncated or len(rows) != 1:
+        raise Fail(1, 'Notification unavailable or exceeds SQL response limit')
+    through = rows[0]['through_sequence']
+    result, cursor, size = [], 0, page_size
+    while cursor < through:
+        sql = f"""SELECT c.id,c.notification,c.author,d.name AS author_name,c.body_markdown,c.sequence,c.created
+          FROM notification_comments c LEFT JOIN user_directory d ON d.id=c.author
+          WHERE c.notification={literal(notification)} AND c.sequence>{cursor} AND c.sequence<={through}
+          ORDER BY c.sequence LIMIT {size}"""
+        batch, truncated = query_rows(cfg, sql)
+        if truncated:
+            if size == 1:
+                raise Fail(1, 'A comment exceeds the response limit. Conversation is incomplete.')
+            size = max(1, size // 2)
+            continue
+        # Sequences are contiguous and immutable. Missing rows may mean access changed.
+        for row in batch:
+            if row['sequence'] != cursor + 1:
+                raise Fail(1, 'Conversation sequence did not advance contiguously; refresh before claiming completeness')
+            cursor = row['sequence']
+        if not batch:
+            raise Fail(1, 'Conversation became unavailable before retrieval completed')
+        result.extend(batch)
+    return {'notification_id': notification, 'items': result, 'count': len(result),
+            'complete': True, 'through_sequence': through,
+            'consistency': 'Shared comments through the initial sequence; refresh for newer comments. Private acknowledgement notes are separate.'}
+
+
 def bulk(cfg, items):
     if not items or len(items) > 1000:
         raise Fail(2, 'bulk requires 1–1000 explicit recipient actions')
@@ -737,6 +815,19 @@ def run(args):
         data = must(cfg, 'GET', '/api/context/schema')
     elif args.command == 'backlog':
         data = backlog(cfg, args)
+    elif args.command == 'conversation':
+        data = conversation(cfg, args.notification, args.page_size)
+    elif args.command == 'comment':
+        body = read_json(args.json, dict, 'comment')
+        if not re.fullmatch('[a-z0-9]{15}', args.notification):
+            raise Fail(2, 'invalid notification id')
+        if set(body) - {'body_markdown', 'submission_key'}:
+            raise Fail(2, 'comment accepts body_markdown and submission_key only')
+        if not isinstance(body.get('submission_key'), str) or not body['submission_key'].strip() or len(body['submission_key']) > 200:
+            raise Fail(2, 'comment requires a stable submission_key of 1–200 characters; generate once with newkey and retain the payload for retries')
+        if not isinstance(body.get('body_markdown'), str) or not body['body_markdown'].strip() or len(body['body_markdown']) > 4000:
+            raise Fail(2, 'comment requires nonempty body_markdown of at most 4000 characters')
+        data = must(cfg, 'POST', records('notification_comments'), {'notification': args.notification, **body})
     elif args.command == 'bulk':
         data, ok = bulk(cfg, read_json(args.json, list, 'bulk actions'))
         code = 0 if ok else 1
@@ -776,8 +867,9 @@ def run(args):
 
 
 READABLE = ('notifications', 'notification_recipients', 'notification_references', 'notification_events',
-            'user_directory', 'user_status', 'notification_preferences', 'notification_feedback')
-WRITABLE = ('notification_feedback', 'notifications', 'notification_recipients', 'user_status', 'notification_preferences')
+            'user_directory', 'user_status', 'notification_preferences', 'notification_feedback',
+            'notification_comments', 'notification_conversation_state')
+WRITABLE = ('notification_conversation_state', 'notification_feedback', 'notifications', 'notification_recipients', 'user_status', 'notification_preferences')
 
 
 def parse(argv):
@@ -795,6 +887,10 @@ def parse(argv):
     p.add_argument('--no-browser', action='store_true', help='print the sign-in URL without opening a browser (use over SSH)')
     p = commands.add_parser('query'); p.add_argument('query')
     p = commands.add_parser('get'); p.add_argument('collection', choices=READABLE); p.add_argument('id')
+    p = commands.add_parser('conversation', help='Read all shared comments chronologically without changing inbox state')
+    p.add_argument('notification'); p.add_argument('--page-size', type=int, default=50)
+    p = commands.add_parser('comment', help='Post an immutable shared comment; requires explicit user authorization')
+    p.add_argument('notification'); p.add_argument('json', help='JSON body_markdown and stable submission_key, or - for stdin')
     for name in ('publish', 'bulk'):
         p = commands.add_parser(name); p.add_argument('json', help='JSON payload or - for stdin')
     for name in ('create', 'update'):
@@ -802,7 +898,7 @@ def parse(argv):
         if name == 'update': p.add_argument('id')
         p.add_argument('json', help='JSON payload or - for stdin')
     p = commands.add_parser('backlog', help='Retrieve every matching recipient row with keyset pagination')
-    for flag in ('feedback', 'sent', 'include-archived', 'include-withdrawn', 'unread', 'awaiting-ack', 'overdue'):
+    for flag in ('conversations', 'feedback', 'sent', 'include-archived', 'include-withdrawn', 'unread', 'awaiting-ack', 'overdue'):
         p.add_argument('--' + flag, action='store_true')
     signup = p.add_mutually_exclusive_group()
     signup.add_argument('--awaiting-signup', action='store_true', help='With --sent: unclaimed email recipients before their 30-day expiry')

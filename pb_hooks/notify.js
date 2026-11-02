@@ -41,6 +41,7 @@ function claimAuth(e){
       // A previously linked row must never be replaced or merged with another identity.
       if(rows(e.app,'notification_recipients','notification = {:n} && recipient = {:u}',{n:n.id,u:user.id}).length)continue;
       r.set('recipient',user.id);r.set('claimed_at',now);r.set('claim_expires_at','');bump(e.app,r);
+      require(`${__hooks}/conversations.js`).ensure(e.app,n,user.id,r);
       event(e.app,n.id,user.id,'claimed',r.id);
     }
   }
@@ -77,6 +78,7 @@ function publish(app,id,b){
   const n=record(app,'notifications',values);
   for(const key of Object.keys(targets))record(app,'notification_recipients',Object.assign({notification:n.id,revision:1},targets[key]));
   for(const ref of payload.references)record(app,'notification_references',Object.assign({notification:n.id},ref));
+  require(`${__hooks}/conversations.js`).initialize(app,n);
   event(app,n.id,id,'published');return n;
 }
 function updateNotification(app,id,r,b){
@@ -98,7 +100,11 @@ function updateRecipient(app,id,r,b){
   // Composite actions check the whole version even on retries; never overwrite newer state.
   if(combined)revision(b,r);
   const changes=actions.filter(action=>action==='unarchive'?!!r.getString(fields[action]):!r.getString(fields[action]));
-  if(!changes.length)return r;
+  if(!changes.length){
+    const n=get(app,'notifications',r.getString('notification'));
+    const changed=require(`${__hooks}/conversations.js`).legacyAction(app,n,id,b.action,b.expected_revision===r.getInt('revision'));
+    if(changed){bump(app,r);event(app,n.id,id,b.action,r.id);}return r;
+  }
   if(!combined)revision(b,r);
   const n=get(app,'notifications',r.getString('notification')),newAcknowledgement=changes.includes('acknowledge');
   if(newAcknowledgement&&n.getString('withdrawn_at'))invalid('Cannot acknowledge a withdrawn notification');
@@ -113,7 +119,9 @@ function updateRecipient(app,id,r,b){
     f.set('latest_at',r.getString('acknowledged_at'));f.set('activity_version',f.getInt('activity_version')+1);
     f.set('read_at','');f.set('archived_at','');
     if(fresh){f.set('revision',1);app.save(f);}else bump(app,f);
+    require(`${__hooks}/conversations.js`).privateFeedback(app,n,f);
   }
+  require(`${__hooks}/conversations.js`).legacyAction(app,n,id,b.action);
   for(const action of changes)event(app,n.id,id,action,r.id);return r;
 }
 function updateFeedback(app,id,r,b){
@@ -129,6 +137,7 @@ function updateFeedback(app,id,r,b){
     r.set('archived_at',now);changed=true;
   }
   if(b.action==='unarchive' && r.getString('archived_at')){r.set('archived_at','');changed=true;}
+  require(`${__hooks}/conversations.js`).legacyAction(app,get(app,'notifications',r.getString('notification')),id,b.action);
   if(!changed)return r;
   return bump(app,r);
 }
@@ -158,8 +167,13 @@ function write(e){
     if(table==='notifications')result=fresh?publish(app,id,body):updateNotification(app,id,r,body);
     else if(table==='notification_recipients')result=updateRecipient(app,id,r,body);
     else if(table==='notification_feedback')result=updateFeedback(app,id,r,body);
+    else if(table==='notification_comments')result=require(`${__hooks}/conversations.js`).post(app,id,body);
+    else if(table==='notification_conversation_state')result=require(`${__hooks}/conversations.js`).update(app,id,r,body);
     else result=personal(app,id,table,r,body);
   });
+  if(['notification_conversation_state','notification_feedback'].includes(table)){
+    require(`${__hooks}/inbox_realtime.js`).changed({app:e.app,record:result,next:()=>{}});
+  }
   return e.json(200,result);
 }
 module.exports={write,claimAuth};
