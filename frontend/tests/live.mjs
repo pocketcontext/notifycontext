@@ -94,7 +94,7 @@ try {
  // Sender view includes Bob's state; another recipient's state never reaches Carol.
  assert.ok(asAlice.people.some(person=>person.id===asBob.people[0].id && person.acknowledged_at));
  await page.getByRole('button',{name:'New notification'}).click();
- await page.getByLabel('To',{exact:true}).selectOption(process.env.NOTIFYCONTEXT_TEST_ALICE);
+ await page.locator(`#recipient-options input[value="${process.env.NOTIFYCONTEXT_TEST_ALICE}"]`).check();
  await page.getByLabel('Subject',{exact:true}).fill('Budget approval requested');
  await page.locator('#body').fill('## Budget\nPlease review **the totals**.');await page.locator('[data-editor-id=body]').getByRole('tab',{name:'Preview',exact:true}).click();
  await page.getByLabel('Request acknowledgement',{exact:true}).check();

@@ -102,3 +102,26 @@
 
 .markdown-editor{margin-bottom:16px}.markdown-editor>label{font-size:12px;margin-bottom:7px}.markdown-editor-surface{border:1px solid #ccd7ce;border-radius:7px;background:#fff;overflow:hidden}.markdown-tabs{display:flex;gap:4px;padding:5px 7px 0;border-bottom:1px solid var(--border);background:#f7f9f3}.markdown-tabs [role=tab]{padding:9px 12px;background:none;color:var(--muted);border-radius:5px 5px 0 0;border-bottom:2px solid transparent;font-size:12px}.markdown-tabs [role=tab][aria-selected=true]{border-bottom-color:var(--green);color:var(--green);background:#fff;font-weight:600}.markdown-editor [role=tabpanel][hidden]{display:none}.markdown-editor textarea{border:0;border-radius:0;margin:0;min-height:70px;resize:vertical;box-shadow:none}.markdown-editor [role=tabpanel]{margin:0}.markdown-editor [id$="-preview-panel"]{overflow:auto;min-height:70px}.markdown-editor .markdown-preview,#comment-preview,#preview{padding:11px 12px;border:0;border-radius:0;margin:0;min-height:0}.markdown-editor .markdown-preview>:last-child{margin-bottom:0}.markdown-empty{color:var(--muted);font-size:13px}.conversation-triage{display:block}.conversation-triage .fine{margin-bottom:0}.withdrawal>strong{display:block;margin-bottom:8px}.withdrawal .markdown>:last-child{margin-bottom:0}
 .markdown-editor textarea:focus-visible{outline-offset:-3px}
+
+/* Recipient picker: full-width checkable rows with 44px tap targets instead of a modifier-key multi-select. */
+.recipient-picker{border:0;margin:0 0 16px;padding:0;min-width:0}
+.recipient-picker legend{padding:0;font-weight:500}
+.recipient-picker>small{margin-top:2px}
+.recipient-filter{margin:8px 0 0}
+.recipient-filter input{margin-top:0}
+.recipient-options{margin-top:8px;border:1px solid #ccd7ce;border-radius:7px;background:#fff}
+/* Short lists show every row; only lists long enough to need the filter scroll inside the dialog. */
+.recipient-options-long{max-height:min(320px,45vh);overflow-y:auto;overscroll-behavior:contain}
+.recipient-option{display:flex;align-items:center;gap:12px;min-height:44px;margin:0;padding:8px 12px;border-top:1px solid var(--border);font-weight:400;cursor:pointer}
+.recipient-option:first-child{border-top:0}
+.recipient-option[hidden]{display:none}
+.recipient-option:hover{background:#f6f8f3}
+.recipient-option:has(input:checked){background:#eef4ea}
+.recipient-option input{flex:0 0 auto;width:20px;height:20px;margin:0;padding:0;accent-color:var(--green)}
+.recipient-text{display:flex;flex-direction:column;min-width:0}
+.recipient-name{overflow-wrap:anywhere}
+.recipient-availability{font-size:12px;line-height:1.35}
+.recipient-empty{margin:0;padding:12px;font-size:13px}
+.recipient-summary{margin:6px 0 0;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+/* iOS zooms into form fields under 16px; keep composer fields at 16px on phones and tablets. */
+@media(max-width:900px){#compose-form input:not([type=checkbox]),#compose-form select,#compose-form textarea,#compose-form .recipient-name{font-size:16px}}

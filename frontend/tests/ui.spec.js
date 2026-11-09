@@ -18,9 +18,9 @@ const users={[user]:'Vamsi',[sender]:'Jack'};
 // Query shapes: consolidated refresh, consolidated detail, joined directory, and the separate fallback/legacy reads.
 const classify=sql=>sql.startsWith('SELECT id,author,body_markdown,sequence,created FROM notification_comments')?'comments':sql.startsWith('WITH page')?'inbox':sql.includes(') AS recipients')?'detail':sql.includes('FROM user_directory d LEFT JOIN')?'directory':sql.includes('recipient_total') || sql.startsWith('SELECT * FROM notifications')?'note':sql.includes('FROM notification_recipients r LEFT JOIN')?'recipients':sql.includes('FROM notification_references')?'references':sql.includes('FROM user_directory')?'users':sql.includes('FROM user_status')?'statuses':sql.includes('FROM notification_preferences')?'preferences':(sql.startsWith('SELECT n.id, n.created') || sql.includes('AS activity_key FROM'))?'latest':sql.includes('count(*) AS total')?'unread':'list';
 const viewerOf=request=>{try{return JSON.parse(Buffer.from(request.headers().authorization.split('.')[1],'base64url')).id;}catch{return '';}};
-async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false,preference:initialPreference=null,body,subject,conversation=false,commentCount=0}={}) {
+async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false,preference:initialPreference=null,body,subject,conversation=false,commentCount=0,extraUsers={},initialStatuses=[]}={}) {
   let releaseRead;const readGate=new Promise(resolve=>{releaseRead=resolve;});
-  const writes=[],queries=[],oversize=new Set(),tooBig=new Set(),statuses=[];let preference=initialPreference,unreadOverride=null;
+  const writes=[],queries=[],oversize=new Set(),tooBig=new Set(),statuses=[...initialStatuses];let preference=initialPreference,unreadOverride=null;
   let notes=Array.from({length:count},(_,i)=>({...initial,id:'note'+String(i+1).padStart(11,'0'),subject:i?'Notification '+(i+1):subject||initial.subject,body_markdown:i?initial.body_markdown:body||initial.body_markdown}));
   let recipients=notes.map((n,i)=>({id:'recp'+String(i+1).padStart(11,'0'),notification:n.id,recipient:user,addressed_email:'',claimed_at:'',claim_expires_at:'',read_at:'',acknowledged_at:'',archived_at:'',acknowledgement_markdown:'',revision:1,created:now}));
   if(pending){
@@ -46,7 +46,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
   const latest=viewer=>notes.filter(n=>!n.withdrawn_at && recipients.some(r=>r.notification===n.id && r.recipient===viewer)).slice(0,100).map(n=>({id:n.id,created:n.created}));
   const unread=viewer=>unreadOverride ?? recipients.filter(r=>r.recipient===viewer && !r.read_at && !r.archived_at && !notes.find(n=>n.id===r.notification)?.withdrawn_at).length;
   const prefs=()=>preference?[{id:preference.id,alerts_paused_until:preference.alerts_paused_until,revision:preference.revision}]:[];
-  const directory=()=>Object.entries(users).map(([id,name])=>{const status=statuses.find(s=>s.user===id);return {id,name,status_id:status?.id ?? null,availability:status?.availability ?? null,message:status?.message ?? null,expires_at:status?.expires_at ?? null,status_revision:status?.revision ?? null};});
+  const directory=()=>Object.entries({...users,...extraUsers}).map(([id,name])=>{const status=statuses.find(s=>s.user===id);return {id,name,status_id:status?.id ?? null,availability:status?.availability ?? null,message:status?.message ?? null,expires_at:status?.expires_at ?? null,status_revision:status?.revision ?? null};});
   const noteFor=(sql,viewer)=>{const id=literal(sql,/(?:n\.id|WHERE id)=\'([a-z0-9]{15})\'/);const n=notes.find(item=>item.id===id);return n && visibleNote(n,viewer)?n:null;};
   const peopleFor=(n,viewer)=>recipients.filter(r=>r.notification===n.id && (n.sender===viewer || r.recipient===viewer)).map(({notification,...r})=>({...r,recipient_name:r.recipient_name ?? users[r.recipient] ?? null}));
   const refsFor=n=>n.id===notes[0]?.id?[{id:'ref000000000001',kind:'url',label:'Supporting document',url:'https://example.com',created:now}]:[];
@@ -134,7 +134,7 @@ test('complete backlog pagination and search',async({page})=>{
 test('composer, settings, keyboard focus and mobile layout',async({page})=>{
   await page.setViewportSize({width:390,height:844});const {writes}=await setup(page);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.getByRole('button',{name:'New notification'}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByLabel('To',{exact:true}).selectOption(sender);await page.getByLabel('Subject',{exact:true}).fill('Please review the budget');await page.locator('#body').fill('**Budget** review\n\n- Check totals');await page.locator('[data-editor-id=body]').getByRole('tab',{name:'Preview',exact:true}).click();await expect(page.locator('#preview strong')).toHaveText('Budget');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();expect(writes[0].body.subject).toBe('Please review the budget');expect(writes[0].body.submission_key).toBeTruthy();
+  await page.getByRole('button',{name:'New notification'}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('checkbox',{name:'Jack',exact:true}).check();await page.getByLabel('Subject',{exact:true}).fill('Please review the budget');await page.locator('#body').fill('**Budget** review\n\n- Check totals');await page.locator('[data-editor-id=body]').getByRole('tab',{name:'Preview',exact:true}).click();await expect(page.locator('#preview strong')).toHaveText('Budget');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();expect(writes[0].body.subject).toBe('Please review the budget');expect(writes[0].body.submission_key).toBeTruthy();
   await page.getByRole('button',{name:'← Back to inbox'}).click();await page.getByRole('button',{name:'Open notifications menu',exact:true}).click();await page.locator('#settings').click();await page.getByLabel('Status',{exact:true}).selectOption('busy');await page.getByRole('button',{name:'Save status'}).click();expect(writes[1].body.availability).toBe('busy');expect(writes[1].body.user).toBeUndefined();
   await page.locator('#settings').click();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).not.toBeVisible();await expect(page.locator('#settings')).toBeFocused();
   await page.screenshot({path:'/tmp/notifycontext-mobile.png',fullPage:true});
@@ -168,7 +168,66 @@ test('email-only and mixed addressing preserve explicit recipients and explain n
  await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.locator('#form-error')).toContainText('Choose a colleague');expect(writes).toHaveLength(0);
  await page.getByLabel('Recipient emails',{exact:true}).fill('NEW.Colleague@example.test, second@example.test');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();
  expect(writes[0].body.recipients).toEqual([]);expect(writes[0].body.recipient_emails).toEqual(['new.colleague@example.test','second@example.test']);
- await page.getByRole('button',{name:'New notification'}).click();await page.getByLabel('To',{exact:true}).selectOption(sender);await page.getByLabel('Recipient emails',{exact:true}).fill('another@example.test');await page.getByLabel('Subject',{exact:true}).fill('Mixed recipients');await page.locator('#body').fill('Shared update');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();expect(writes[1].body.recipients).toEqual([sender]);expect(writes[1].body.recipient_emails).toEqual(['another@example.test']);
+ await page.getByRole('button',{name:'New notification'}).click();await page.getByRole('checkbox',{name:'Jack',exact:true}).check();await page.getByLabel('Recipient emails',{exact:true}).fill('another@example.test');await page.getByLabel('Subject',{exact:true}).fill('Mixed recipients');await page.locator('#body').fill('Shared update');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();expect(writes[1].body.recipients).toEqual([sender]);expect(writes[1].body.recipient_emails).toEqual(['another@example.test']);
+});
+const payloadKeys=['ack_required','body_markdown','due_at','kind','recipient_emails','recipients','references','subject','submission_key'];
+const pickerUsers={user00000000003:'Amira',user00000000004:'Deployment check'};
+const pickerStatuses=[{id:'status000000002',user:sender,availability:'busy',message:'Reviewing budgets',expires_at:new Date(Date.now()+3600000).toISOString(),revision:1},{id:'status000000003',user:'user00000000003',availability:'away',message:'Old status',expires_at:'2020-01-01 00:00:00.000Z',revision:1}];
+const recipientLabels=page=>page.locator('#recipient-options .recipient-option:not([hidden]) .recipient-name').allTextContents();
+async function finishCompose(page,subject){await page.getByLabel('Subject',{exact:true}).fill(subject);await page.locator('#body').fill('Synthetic update');await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();}
+test('recipient checkboxes select and deselect colleagues and keep the payload shape',async({page})=>{
+ const {writes}=await setup(page,{extraUsers:pickerUsers,initialStatuses:pickerStatuses});await page.getByRole('button',{name:'New notification'}).click();
+ const picker=page.getByRole('group',{name:'To',exact:true});await expect(picker).toBeVisible();await expect(page.locator('#dialog select[multiple]')).toHaveCount(0);
+ await expect(picker).toContainText('Choose colleagues, add emails, or both.');await expect(page.locator('#dialog')).not.toContainText('Ctrl');
+ await expect(page.locator('#recipient-filter')).toHaveCount(0);await expect(page.locator('#recipient-options')).not.toHaveClass(/recipient-options-long/);
+ expect(await recipientLabels(page)).toEqual(['Amira','Deployment check','Jack','Vamsi (you)']);
+ // Only a current, explicitly set availability is shown; unset and expired statuses show nothing.
+ await expect(page.getByRole('checkbox',{name:'Jack',exact:true})).toHaveAccessibleDescription('Busy · Reviewing budgets');
+ await expect(page.getByRole('checkbox',{name:'Amira',exact:true})).toHaveAccessibleDescription('');await expect(picker).not.toContainText('Not set');await expect(picker).not.toContainText('Old status');
+ const summary=page.locator('#recipient-summary');await expect(summary).toHaveText('No colleagues selected');
+ await page.getByRole('checkbox',{name:'Jack',exact:true}).check();await page.locator('.recipient-option',{hasText:'Amira'}).click();
+ await expect(summary).toHaveText('2 selected: Amira, Jack');
+ await page.getByRole('checkbox',{name:'Amira',exact:true}).uncheck();await expect(summary).toHaveText('1 selected: Jack');
+ await finishCompose(page,'Checkbox recipients');
+ expect(Object.keys(writes[0].body).sort()).toEqual(payloadKeys);expect(writes[0].body.recipients).toEqual([sender]);expect(writes[0].body.recipient_emails).toEqual([]);
+ await page.getByRole('button',{name:'New notification'}).click();await expect(page.locator('#recipient-summary')).toHaveText('No colleagues selected');
+ for(const name of ['Jack','Amira','Deployment check','Vamsi (you)'])await page.getByRole('checkbox',{name,exact:true}).check();
+ await expect(page.locator('#recipient-summary')).toHaveText('4 selected: Amira, Deployment check, Jack, Vamsi (you)');
+ await page.getByRole('checkbox',{name:'Deployment check',exact:true}).uncheck();await page.getByLabel('Recipient emails',{exact:true}).fill('Later@example.test');
+ await finishCompose(page,'Several recipients');
+ expect(Object.keys(writes[1].body).sort()).toEqual(payloadKeys);expect(writes[1].body.recipients.slice().sort()).toEqual(['user00000000001','user00000000002','user00000000003']);expect(writes[1].body.recipient_emails).toEqual(['later@example.test']);
+});
+test('recipient picker works from the keyboard and validation focuses it',async({page})=>{
+ const {writes}=await setup(page,{extraUsers:pickerUsers});await page.getByRole('button',{name:'New notification'}).click();
+ await page.getByLabel('Subject',{exact:true}).fill('Keyboard recipients');await page.locator('#body').fill('Synthetic update');
+ await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.locator('#form-error')).toHaveText('Choose a colleague or enter at least one recipient email.');expect(writes).toHaveLength(0);
+ const amira=page.getByRole('checkbox',{name:'Amira',exact:true});await expect(amira).toBeFocused();
+ await page.keyboard.press('Space');await expect(amira).toBeChecked();
+ await page.keyboard.press('Tab');await expect(page.getByRole('checkbox',{name:'Deployment check',exact:true})).toBeFocused();
+ await page.keyboard.press('Tab');await expect(page.getByRole('checkbox',{name:'Jack',exact:true})).toBeFocused();await page.keyboard.press('Space');
+ await page.keyboard.press('Shift+Tab');await page.keyboard.press('Shift+Tab');await expect(amira).toBeFocused();await page.keyboard.press('Space');await expect(amira).not.toBeChecked();
+ await expect(page.locator('#recipient-summary')).toHaveText('1 selected: Jack');
+ const focusRing=await amira.evaluate(node=>getComputedStyle(node).outlineStyle);expect(focusRing).not.toBe('none');
+ await page.getByRole('button',{name:'Send notification',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByRole('dialog')).not.toBeVisible();
+ expect(Object.keys(writes[0].body).sort()).toEqual(payloadKeys);expect(writes[0].body.recipients).toEqual([sender]);
+});
+test('long recipient lists get a filter that keeps hidden selections',async({page})=>{
+ const many=Object.fromEntries(Array.from({length:10},(_,i)=>['user'+String(i+10).padStart(11,'0'),'Colleague '+String(i+1).padStart(2,'0')]));
+ const {writes}=await setup(page,{extraUsers:many});await page.getByRole('button',{name:'New notification'}).click();
+ const filter=page.getByRole('searchbox',{name:'Filter colleagues',exact:true});await expect(filter).toBeVisible();await expect(page.locator('#recipient-options')).toHaveClass(/recipient-options-long/);expect(await recipientLabels(page)).toHaveLength(12);
+ await filter.fill('ague 07');expect(await recipientLabels(page)).toEqual(['Colleague 07']);await page.getByRole('checkbox',{name:'Colleague 07',exact:true}).check();
+ await filter.press('Enter');expect(writes).toHaveLength(0);await expect(page.getByRole('dialog')).toBeVisible();
+ await filter.fill('JACK');expect(await recipientLabels(page)).toEqual(['Jack']);await page.getByRole('checkbox',{name:'Jack',exact:true}).check();
+ await filter.fill('nobody');await expect(page.locator('#recipient-no-match')).toBeVisible();await expect(page.locator('#recipient-summary')).toHaveText('2 selected: Colleague 07, Jack');
+ await finishCompose(page,'Filtered recipients');
+ expect(Object.keys(writes[0].body).sort()).toEqual(payloadKeys);expect(writes[0].body.recipients.slice().sort()).toEqual([sender,'user00000000016']);
+});
+test('recipient picker is touch-sized at phone width without zooming fields',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await setup(page,{extraUsers:pickerUsers,initialStatuses:pickerStatuses});await page.getByRole('button',{name:'New notification'}).click();
+ const sizes=await page.evaluate(()=>({rows:[...document.querySelectorAll('.recipient-option')].map(row=>row.getBoundingClientRect().height),fields:[...document.querySelectorAll('#compose-form input:not([type=checkbox]),#compose-form select,#compose-form textarea,.recipient-name')].map(node=>getComputedStyle(node).fontSize),overflow:document.querySelector('#dialog').scrollWidth>document.querySelector('#dialog').clientWidth,box:document.querySelector('.recipient-option input').getBoundingClientRect().width}));
+ expect(Math.min(...sizes.rows)).toBeGreaterThanOrEqual(44);expect(new Set(sizes.fields)).toEqual(new Set(['16px']));expect(sizes.overflow).toBe(false);expect(sizes.box).toBeGreaterThanOrEqual(20);
+ // Tapping anywhere on the row, including the availability line, toggles the colleague.
+ await page.locator('.recipient-option .recipient-availability',{hasText:'Busy'}).click();await expect(page.getByRole('checkbox',{name:'Jack',exact:true})).toBeChecked();
 });
 test('Sent keeps pending recipients without directory accounts and distinguishes expiry',async({page})=>{
  await setup(page,{pending:true});await page.getByRole('button',{name:'Sent',exact:false}).click();await page.getByRole('heading',{name:'Supplier renewal ready'}).click();
@@ -654,7 +713,7 @@ test('all Markdown editors offer safe Preview and submit their exact text from P
  await page.getByRole('button',{name:'Post comment',exact:true}).click();await expect(page.locator('.conversation-comment')).toHaveCount(1);
  expect(mock.writes.at(-1).body.body_markdown).toBe(unsafeMarkdown);
  await page.getByRole('button',{name:'New notification',exact:true}).click();
- await page.getByLabel('To',{exact:true}).selectOption(sender);await page.getByLabel('Subject',{exact:true}).fill('Preview publication');
+ await page.getByRole('checkbox',{name:'Jack',exact:true}).check();await page.getByLabel('Subject',{exact:true}).fill('Preview publication');
  await page.locator('#body').fill(unsafeMarkdown);await assertSafePreview(page,'body');
  await page.getByRole('button',{name:'Send notification',exact:true}).click();await expect(page.locator('#dialog')).not.toBeVisible();
  expect(mock.writes.at(-1).body.body_markdown).toBe(unsafeMarkdown);
@@ -678,7 +737,7 @@ for(const field of ['body','comment-body','withdrawal-reason']){
   let submit;
   if(field==='body'){
    await page.getByRole('button',{name:'New notification',exact:true}).click();
-   await page.getByLabel('To',{exact:true}).selectOption(sender);await page.getByLabel('Subject',{exact:true}).fill('Required message');
+   await page.getByRole('checkbox',{name:'Jack',exact:true}).check();await page.getByLabel('Subject',{exact:true}).fill('Required message');
    submit=page.getByRole('button',{name:'Send notification',exact:true});
   }else{
    if(field==='withdrawal-reason')await page.getByRole('button',{name:'Sent',exact:false}).click();
@@ -771,7 +830,7 @@ test('a delayed detail refresh preserves edits and the latest caret made while i
 test('a late compose response cannot close or overwrite a replacement dialog',async({page})=>{
  await setup(page);let release,started;const gate=new Promise(resolve=>{release=resolve;}),pending=new Promise(resolve=>{started=resolve;});
  await page.route('**/api/collections/notifications/records',async route=>{started();await gate;await route.fallback();});
- await page.getByRole('button',{name:'New notification',exact:true}).click();await page.getByLabel('To',{exact:true}).selectOption(sender);
+ await page.getByRole('button',{name:'New notification',exact:true}).click();await page.getByRole('checkbox',{name:'Jack',exact:true}).check();
  await page.getByLabel('Subject',{exact:true}).fill('First request');await page.locator('#body').fill('First private message');await editorTab(page,'body','Preview').click();
  await page.getByRole('button',{name:'Send notification',exact:true}).click();await pending;
  await page.locator('.dialog-close').click();await page.getByRole('button',{name:'New notification',exact:true}).click();

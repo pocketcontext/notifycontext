@@ -424,3 +424,38 @@ The portable launcher was pinned to published client source
 an unrelated temporary directory against the exact pinned server, including live
 schema comparison and explicit preference updates. The final release workflow
 validates this source and launcher together before image publication.
+
+## Checkbox recipient picker — 9 November 2026
+
+The composer's "To" field is now a group of labelled checkboxes, one 44px row per
+directory colleague, sorted by name, with the signed-in account marked "(you)". A
+line below the list shows the count and names selected. More than eight colleagues
+adds a filter field and an internally scrolling list; filtered-out selections stay
+selected and are still sent. Availability appears under a name only when a current
+status is set; unset and expired statuses show nothing instead of "Not set". The
+hint reads "Choose colleagues, add emails, or both." Checkboxes keep the field name
+`recipients`, so the publication payload is unchanged. With no recipients, submitting
+focuses the first colleague (or the email field). Composer fields are 16px at
+900px and below to avoid iOS zoom. No schema, hook, server pin or client change.
+
+The directory (`user_directory`) mirrors every `users` row's ID and name and is not
+updated when an account is disabled or unverified, so disabled accounts still appear.
+Publication to them is refused (`notify.js` `active()`, HTTP 403). A synthetic local
+instance with two disabled accounts named "Deployment verification (disabled after
+checks)" reproduced both duplicate rows and the 403. The browser cannot tell which
+entries are disabled; hiding them needs a server-side directory change.
+
+Validation used a clean build of the unchanged pinned server
+`5f1b8f53e0af9d45cb0b396a2ecfb4e9932dca5a` (`vcs.modified=false`, Go 1.27.2) and
+synthetic isolated data. The production frontend build passed, as did all 83 browser
+fixture tests: the 79 existing ones, with composer tests moved from `selectOption`
+to checkboxes, and four new ones covering selection, deselection, the exact payload
+keys, mixed recipients, keyboard Space/Tab/Shift+Tab with validation focus, a
+filtered long list with hidden selections and Enter in the filter not submitting,
+and 390px touch sizes (rows of at least 44px, 16px fields, no overflow). All four
+actual-server browser workflows passed (`live.py` now checks a colleague by ID).
+Every README Python suite, plus `tests/feedback.py`, `combined_actions.py`,
+maintenance, object-storage, entrypoint and recovery-comparison, passed. The
+package suites ran under `.venv/bin/python`. Desktop and 390px screenshots of a
+synthetic local instance were inspected. Local runs used Node.js 26; container
+gates were not run locally.

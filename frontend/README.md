@@ -7,7 +7,7 @@ npm ci
 npm run build
 ```
 
-The composer accepts directory selections, comma-separated recipient emails, or both. Existing verified active accounts receive notifications immediately. A new colleague has 30 days to sign in and claim a pending notification; no invitation email is sent. Sent details preserve recipients without directory accounts and show “Awaiting first sign-in,” “Expired,” or “Withdrawn.” Email addresses are shown only where the authenticated sender/recipient SQL policy permits.
+The composer accepts directory selections, comma-separated recipient emails, or both. Colleagues are labelled checkboxes sorted by name, with a selected count and names below the list; a filter field appears when the directory has more than eight people, and hidden selections are kept. A colleague's availability appears under their name only when they have set a current one. The directory lists every account, including disabled ones, which the server then refuses as recipients. Existing verified active accounts receive notifications immediately. A new colleague has 30 days to sign in and claim a pending notification; no invitation email is sent. Sent details preserve recipients without directory accounts and show “Awaiting first sign-in,” “Expired,” or “Withdrawn.” Email addresses are shown only where the authenticated sender/recipient SQL policy permits.
 
 The production build writes `../pb_public/` (generated and untracked). Run the pinned PocketContext binary from the application root; `pb_hooks/frontend.pb.js` serves these public assets. `npm run dev` starts a local Vite client and proxies `/api` to a local server at `127.0.0.1:8090`.
 
