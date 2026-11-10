@@ -214,9 +214,9 @@ async function start() {
 // after a minute when an unknown sender appears, and immediately after the user's own status change.
 async function directory() {
   const epoch=sessionEpoch,records=[];
-  for(let offset=0;;offset+=200){const batch=await query(`SELECT d.id, d.name, s.id AS status_id, s.availability, s.message, s.expires_at, s.revision AS status_revision FROM user_directory d LEFT JOIN user_status s ON s.user=d.id ORDER BY d.id LIMIT 200 OFFSET ${offset}`);records.push(...batch);if(batch.length<200)break;}
+  for(let offset=0;;offset+=200){const batch=await query(`SELECT d.id, d.name, d.active, s.id AS status_id, s.availability, s.message, s.expires_at, s.revision AS status_revision FROM user_directory d LEFT JOIN user_status s ON s.user=d.id ORDER BY d.id LIMIT 200 OFFSET ${offset}`);records.push(...batch);if(batch.length<200)break;}
   if(epoch!==sessionEpoch)return;
-  state.directory=records.map(({id,name})=>({id,name}));state.directoryAt=Date.now();
+  state.directory=records.map(({id,name,active})=>({id,name,active:Boolean(Number(active))}));state.directoryAt=Date.now();
   state.statuses=records.filter(row=>row.status_id).map(row=>({id:row.status_id,user:row.id,availability:row.availability,message:row.message,expires_at:row.expires_at,revision:row.status_revision}));
   const mine=$('#my-status');if(mine)mine.textContent=statusDescription(pb.authStore.record.id);
 }
@@ -599,8 +599,8 @@ function dialog(content,setup) {
 // Availability is shown only when a colleague has set one; it never blocks delivery.
 const recipientFilterThreshold=8;
 function recipientPicker() {
-  const me=pb.authStore.record.id,people=state.directory.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'',undefined,{sensitivity:'base'}) || a.id.localeCompare(b.id));
-  const options=people.map((user,index)=>{const status=effectiveStatus(statusFor(user.id))!=='not_set'?statusDescription(user.id):'',label=`${user.name || 'Colleague'}${user.id===me?' (you)':''}`;
+  const me=pb.authStore.record.id,people=state.directory.filter(user=>user.active && user.id!==me).sort((a,b)=>(a.name||'').localeCompare(b.name||'',undefined,{sensitivity:'base'}) || a.id.localeCompare(b.id));
+  const options=people.map((user,index)=>{const status=effectiveStatus(statusFor(user.id))!=='not_set'?statusDescription(user.id):'',label=user.name || 'Colleague';
     return `<label class="recipient-option" data-name="${e(label.toLowerCase())}"><input type="checkbox" name="recipients" value="${e(user.id)}" data-label="${e(label)}" aria-labelledby="recipient-name-${index}"${status?` aria-describedby="recipient-status-${index}"`:''}><span class="recipient-text"><span id="recipient-name-${index}" class="recipient-name">${e(label)}</span>${status?`<small id="recipient-status-${index}" class="recipient-availability">${e(status)}</small>`:''}</span></label>`;}).join('');
   const filter=people.length>recipientFilterThreshold?`<label class="recipient-filter"><span class="sr-only">Filter colleagues</span><input id="recipient-filter" type="search" placeholder="Filter colleagues" autocomplete="off" aria-controls="recipient-options"></label>`:'';
   return `<fieldset class="recipient-picker" aria-describedby="recipient-hint"><legend>To</legend><small id="recipient-hint">Choose colleagues, add emails, or both.</small>${people.length?`${filter}<div id="recipient-options" class="recipient-options${filter?' recipient-options-long':''}">${options}<p id="recipient-no-match" class="muted recipient-empty" hidden>No colleagues match.</p></div><p id="recipient-summary" class="recipient-summary" aria-live="polite">No colleagues selected</p>`:'<p class="muted recipient-empty">No colleagues in the directory yet. Add emails below.</p>'}</fieldset>`;

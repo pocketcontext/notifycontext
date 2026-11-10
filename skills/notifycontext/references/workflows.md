@@ -19,7 +19,7 @@ Install the `notifycontext` launcher on PATH as described in the skill. These ex
 notifycontext login --url https://notify.pocketcontext.com --email you@pocketcontext.com
 notifycontext whoami
 notifycontext check
-notifycontext query 'SELECT id,name FROM user_directory ORDER BY name'
+notifycontext query 'SELECT id,name FROM user_directory WHERE active ORDER BY name'
 notifycontext backlog --conversations --unread
 notifycontext backlog --unread
 notifycontext backlog --awaiting-ack --overdue

@@ -459,3 +459,23 @@ maintenance, object-storage, entrypoint and recovery-comparison, passed. The
 package suites ran under `.venv/bin/python`. Desktop and 390px screenshots of a
 synthetic local instance were inspected. Local runs used Node.js 26; container
 gates were not run locally.
+
+## Inactive accounts hidden from the recipient picker — 10 November 2026
+
+`user_directory` gains a server-maintained `active` flag: true only for verified,
+not disabled accounts. The account hook updates it in the same transaction as any
+account change, and migration `1790300900_directory_active.js` sets it for existing
+rows. Rows are never removed, so history keeps sender, recipient and comment author
+names. The SQL snapshot exposes `active`; the browser loads it with the directory and
+lists only active colleagues in the composer. Publication still refuses inactive
+accounts (`notify.js` `active()`). The picker also leaves out the signed-in
+account, which the 9 November picker marked "(you)"; the API still accepts the
+sender's own ID or email, so existing self-addressed flows keep working. This
+supersedes the 9 November notes that disabled accounts and the sender appear in
+the picker.
+
+The skill resolves colleagues with `WHERE active`; both `schema.json` snapshots add
+the column, so clients pinned before this release report a schema difference in
+`check` until they adopt it. `tests/auth.py` covers disable/enable and
+unverify/verify transitions and an upgrade of disabled, unverified and current
+accounts created before the migration; a browser test covers the hidden entry.

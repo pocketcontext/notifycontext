@@ -17,11 +17,11 @@ async function fixture(page,{count=4,mode='next'}={}) {
     notification_feedback:'id,notification,user,latest_recipient,latest_at,read_at,archived_at,revision',
     notification_references:'id,notification,kind,label,url,created',
     notification_preferences:'id,user,alerts_paused_until,auto_advance,revision',
-    user_directory:'id,name',user_status:'id,user,availability,message,expires_at,revision',
+    user_directory:'id,name,active',user_status:'id,user,availability,message,expires_at,revision',
   };
-  for(const [table,columns] of Object.entries(tables))db.exec(`CREATE TABLE ${table} (${columns.split(',').map(c=>`${c} ${['revision','activity_version','read_version','sequence','ack_required'].includes(c)?'INTEGER':'TEXT'} DEFAULT ''`).join(',')})`);
+  for(const [table,columns] of Object.entries(tables))db.exec(`CREATE TABLE ${table} (${columns.split(',').map(c=>`${c} ${['revision','activity_version','read_version','sequence','ack_required','active'].includes(c)?'INTEGER':'TEXT'} DEFAULT ''`).join(',')})`);
   const insert=(table,row)=>db.prepare(`INSERT INTO ${table} (${Object.keys(row)}) VALUES (${Object.keys(row).map(()=>'?')})`).run(...Object.values(row));
-  insert('user_directory',{id:user,name:'Viewer'});insert('user_directory',{id:sender,name:'Sender'});
+  insert('user_directory',{id:user,name:'Viewer',active:1});insert('user_directory',{id:sender,name:'Sender',active:1});
   insert('notification_preferences',{id:'prefs0000000001',user,alerts_paused_until:'',auto_advance:mode,revision:1});
   for(let i=1;i<=count;i++) {
     const created=new Date(Date.UTC(2026,9,1,0,count-i)).toISOString(),id=noteId(i);

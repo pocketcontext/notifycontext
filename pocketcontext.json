@@ -9,7 +9,8 @@
   "tables": {
     "user_directory": [
       "id",
-      "name"
+      "name",
+      "active"
     ],
     "notifications": [
       "id",

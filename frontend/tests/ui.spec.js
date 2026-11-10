@@ -18,7 +18,7 @@ const users={[user]:'Vamsi',[sender]:'Jack'};
 // Query shapes: consolidated refresh, consolidated detail, joined directory, and the separate fallback/legacy reads.
 const classify=sql=>sql.startsWith('SELECT id,author,body_markdown,sequence,created FROM notification_comments')?'comments':sql.startsWith('WITH page')?'inbox':sql.includes(') AS recipients')?'detail':sql.includes('FROM user_directory d LEFT JOIN')?'directory':sql.includes('recipient_total') || sql.startsWith('SELECT * FROM notifications')?'note':sql.includes('FROM notification_recipients r LEFT JOIN')?'recipients':sql.includes('FROM notification_references')?'references':sql.includes('FROM user_directory')?'users':sql.includes('FROM user_status')?'statuses':sql.includes('FROM notification_preferences')?'preferences':(sql.startsWith('SELECT n.id, n.created') || sql.includes('AS activity_key FROM'))?'latest':sql.includes('count(*) AS total')?'unread':'list';
 const viewerOf=request=>{try{return JSON.parse(Buffer.from(request.headers().authorization.split('.')[1],'base64url')).id;}catch{return '';}};
-async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false,preference:initialPreference=null,body,subject,conversation=false,commentCount=0,extraUsers={},initialStatuses=[]}={}) {
+async function setup(page, {count=1,permission='default',holdRead=false,pending=false,withdrawn=false,restore=false,preference:initialPreference=null,body,subject,conversation=false,commentCount=0,extraUsers={},inactiveUsers=[],initialStatuses=[]}={}) {
   let releaseRead;const readGate=new Promise(resolve=>{releaseRead=resolve;});
   const writes=[],queries=[],oversize=new Set(),tooBig=new Set(),statuses=[...initialStatuses];let preference=initialPreference,unreadOverride=null;
   let notes=Array.from({length:count},(_,i)=>({...initial,id:'note'+String(i+1).padStart(11,'0'),subject:i?'Notification '+(i+1):subject||initial.subject,body_markdown:i?initial.body_markdown:body||initial.body_markdown}));
@@ -46,7 +46,7 @@ async function setup(page, {count=1,permission='default',holdRead=false,pending=
   const latest=viewer=>notes.filter(n=>!n.withdrawn_at && recipients.some(r=>r.notification===n.id && r.recipient===viewer)).slice(0,100).map(n=>({id:n.id,created:n.created}));
   const unread=viewer=>unreadOverride ?? recipients.filter(r=>r.recipient===viewer && !r.read_at && !r.archived_at && !notes.find(n=>n.id===r.notification)?.withdrawn_at).length;
   const prefs=()=>preference?[{id:preference.id,alerts_paused_until:preference.alerts_paused_until,revision:preference.revision}]:[];
-  const directory=()=>Object.entries({...users,...extraUsers}).map(([id,name])=>{const status=statuses.find(s=>s.user===id);return {id,name,status_id:status?.id ?? null,availability:status?.availability ?? null,message:status?.message ?? null,expires_at:status?.expires_at ?? null,status_revision:status?.revision ?? null};});
+  const directory=()=>Object.entries({...users,...extraUsers}).map(([id,name])=>{const status=statuses.find(s=>s.user===id);return {id,name,active:!inactiveUsers.includes(id),status_id:status?.id ?? null,availability:status?.availability ?? null,message:status?.message ?? null,expires_at:status?.expires_at ?? null,status_revision:status?.revision ?? null};});
   const noteFor=(sql,viewer)=>{const id=literal(sql,/(?:n\.id|WHERE id)=\'([a-z0-9]{15})\'/);const n=notes.find(item=>item.id===id);return n && visibleNote(n,viewer)?n:null;};
   const peopleFor=(n,viewer)=>recipients.filter(r=>r.notification===n.id && (n.sender===viewer || r.recipient===viewer)).map(({notification,...r})=>({...r,recipient_name:r.recipient_name ?? users[r.recipient] ?? null}));
   const refsFor=n=>n.id===notes[0]?.id?[{id:'ref000000000001',kind:'url',label:'Supporting document',url:'https://example.com',created:now}]:[];
@@ -180,7 +180,7 @@ test('recipient checkboxes select and deselect colleagues and keep the payload s
  const picker=page.getByRole('group',{name:'To',exact:true});await expect(picker).toBeVisible();await expect(page.locator('#dialog select[multiple]')).toHaveCount(0);
  await expect(picker).toContainText('Choose colleagues, add emails, or both.');await expect(page.locator('#dialog')).not.toContainText('Ctrl');
  await expect(page.locator('#recipient-filter')).toHaveCount(0);await expect(page.locator('#recipient-options')).not.toHaveClass(/recipient-options-long/);
- expect(await recipientLabels(page)).toEqual(['Amira','Deployment check','Jack','Vamsi (you)']);
+ expect(await recipientLabels(page)).toEqual(['Amira','Deployment check','Jack']);
  // Only a current, explicitly set availability is shown; unset and expired statuses show nothing.
  await expect(page.getByRole('checkbox',{name:'Jack',exact:true})).toHaveAccessibleDescription('Busy · Reviewing budgets');
  await expect(page.getByRole('checkbox',{name:'Amira',exact:true})).toHaveAccessibleDescription('');await expect(picker).not.toContainText('Not set');await expect(picker).not.toContainText('Old status');
@@ -191,11 +191,19 @@ test('recipient checkboxes select and deselect colleagues and keep the payload s
  await finishCompose(page,'Checkbox recipients');
  expect(Object.keys(writes[0].body).sort()).toEqual(payloadKeys);expect(writes[0].body.recipients).toEqual([sender]);expect(writes[0].body.recipient_emails).toEqual([]);
  await page.getByRole('button',{name:'New notification'}).click();await expect(page.locator('#recipient-summary')).toHaveText('No colleagues selected');
- for(const name of ['Jack','Amira','Deployment check','Vamsi (you)'])await page.getByRole('checkbox',{name,exact:true}).check();
- await expect(page.locator('#recipient-summary')).toHaveText('4 selected: Amira, Deployment check, Jack, Vamsi (you)');
+ for(const name of ['Jack','Amira','Deployment check'])await page.getByRole('checkbox',{name,exact:true}).check();
+ await expect(page.locator('#recipient-summary')).toHaveText('3 selected: Amira, Deployment check, Jack');
  await page.getByRole('checkbox',{name:'Deployment check',exact:true}).uncheck();await page.getByLabel('Recipient emails',{exact:true}).fill('Later@example.test');
  await finishCompose(page,'Several recipients');
- expect(Object.keys(writes[1].body).sort()).toEqual(payloadKeys);expect(writes[1].body.recipients.slice().sort()).toEqual(['user00000000001','user00000000002','user00000000003']);expect(writes[1].body.recipient_emails).toEqual(['later@example.test']);
+ expect(Object.keys(writes[1].body).sort()).toEqual(payloadKeys);expect(writes[1].body.recipients.slice().sort()).toEqual(['user00000000002','user00000000003']);expect(writes[1].body.recipient_emails).toEqual(['later@example.test']);
+});
+test('recipient picker hides inactive accounts and the signed-in account',async({page})=>{
+ await setup(page,{extraUsers:{...pickerUsers,user00000000009:'Deployment verification (disabled after checks)'},inactiveUsers:['user00000000009']});
+ await page.getByRole('button',{name:'New notification'}).click();
+ expect(await recipientLabels(page)).toEqual(['Amira','Deployment check','Jack']);
+ const picker=page.getByRole('group',{name:'To',exact:true});await expect(picker).not.toContainText('Deployment verification');
+ // The signed-in account is not offered either; this is a tool for notifying colleagues.
+ await expect(picker).not.toContainText('Vamsi');
 });
 test('recipient picker works from the keyboard and validation focuses it',async({page})=>{
  const {writes}=await setup(page,{extraUsers:pickerUsers});await page.getByRole('button',{name:'New notification'}).click();
@@ -214,7 +222,7 @@ test('recipient picker works from the keyboard and validation focuses it',async(
 test('long recipient lists get a filter that keeps hidden selections',async({page})=>{
  const many=Object.fromEntries(Array.from({length:10},(_,i)=>['user'+String(i+10).padStart(11,'0'),'Colleague '+String(i+1).padStart(2,'0')]));
  const {writes}=await setup(page,{extraUsers:many});await page.getByRole('button',{name:'New notification'}).click();
- const filter=page.getByRole('searchbox',{name:'Filter colleagues',exact:true});await expect(filter).toBeVisible();await expect(page.locator('#recipient-options')).toHaveClass(/recipient-options-long/);expect(await recipientLabels(page)).toHaveLength(12);
+ const filter=page.getByRole('searchbox',{name:'Filter colleagues',exact:true});await expect(filter).toBeVisible();await expect(page.locator('#recipient-options')).toHaveClass(/recipient-options-long/);expect(await recipientLabels(page)).toHaveLength(11);
  await filter.fill('ague 07');expect(await recipientLabels(page)).toEqual(['Colleague 07']);await page.getByRole('checkbox',{name:'Colleague 07',exact:true}).check();
  await filter.press('Enter');expect(writes).toHaveLength(0);await expect(page.getByRole('dialog')).toBeVisible();
  await filter.fill('JACK');expect(await recipientLabels(page)).toEqual(['Jack']);await page.getByRole('checkbox',{name:'Jack',exact:true}).check();
